@@ -66,7 +66,8 @@ newMemoryTransport = do
       scheme = memoryScheme,
       handles = memoryHandles,
       bind = memoryBind transport,
-      sendTo = memorySendTo transport
+      sendTo = memorySendTo transport,
+      shutdown = return ()
       }
 
 memoryBind :: MemoryTransport -> Mailbox -> Address -> IO (Either String Binding)

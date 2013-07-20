@@ -22,6 +22,7 @@ library
                   Network.Endpoints
                   Network.Transport
                   Network.Transport.Memory
+                  Network.Transport.TCP
 
   ghc-options: -Wall -threaded
   -- other-modules:       
@@ -30,7 +31,9 @@ library
                        bytestring,
                        cereal,
                        containers,
-                       stm
+                       network,
+                       stm,
+                       text
 
 Test-Suite test-courier
     type: exitcode-stdio-1.0

@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveGeneric #-}
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Network.Transport
@@ -18,6 +20,7 @@ module Network.Transport (
   Address(..),
   Binding(..),
   Mailbox,
+  newMailbox,
   Scheme,
   Transport(..),  
   ) where
@@ -27,6 +30,8 @@ module Network.Transport (
 -- external imports
 import Control.Concurrent.STM
 import Data.ByteString as B
+import GHC.Generics
+import Data.Serialize
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -39,6 +44,12 @@ binding or connecting with a 'Transport'.
 type Mailbox = TQueue B.ByteString
 
 {-|
+Create a new mailbox.
+-}
+newMailbox :: IO Mailbox
+newMailbox = atomically $ newTQueue
+
+{-|
 An address is a logical identifier suitable for establishing a 'Connection' to
 another 'Endpoint' over a 'Transport'. The 'addressScheme' determines which 'Transport'
 will handle attempts to 'connect' or 'bind' to an 'Address'.
@@ -46,7 +57,9 @@ will handle attempts to 'connect' or 'bind' to an 'Address'.
 data Address = Address {
   addressScheme :: String,
   addressIdentifier :: String
-  } deriving (Eq,Show,Ord)
+  } deriving (Eq,Show,Ord,Generic)
+
+instance Serialize Address
 
 {-|
 A scheme is an identifier for a discrete type of transport.
@@ -70,5 +83,6 @@ data Transport = Transport {
   scheme :: String,
   handles :: Address -> Bool,
   bind :: Mailbox -> Address -> IO (Either String Binding),
-  sendTo :: Address -> B.ByteString -> IO ()
+  sendTo :: Address -> B.ByteString -> IO (),
+  shutdown :: IO ()
   }

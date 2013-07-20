@@ -63,7 +63,7 @@ testEndpointSendReceive = do
   Right () <- bindEndpoint endpoint1 address1
   Right () <- bindEndpoint endpoint2 address2
   _ <- sendMessage endpoint1 address2 $ encode "hello!"
-  msg  <- receiveMessage endpoint2    
+  msg <- receiveMessage endpoint2    
   assertEqual "Received message not same as sent" (Right "hello!") (decode msg)
   return ()
   
