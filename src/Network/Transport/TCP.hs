@@ -48,7 +48,7 @@ tcpScheme :: Scheme
 tcpScheme = "tcp"
 
 data TCPTransport = TCPTransport {
-  boundSockets :: SocketMap,
+  boundSockets :: TVar (M.Map Address N.Socket),
   connectedSockets :: SocketMap
   }
                     
@@ -76,13 +76,6 @@ putSocketIfAbsent sockets address socket = atomically $ do
     Nothing -> do
       modifyTVar sockets (\socks -> M.insert address socket socks)
       return (socket,True)
-  
-removeSocket :: SocketMap -> Address -> IO (Maybe TCPSocket)  
-removeSocket sockets address = atomically $ do
-  socketMap <- readTVar sockets
-  let maybeSocket = M.lookup address socketMap
-  modifyTVar sockets (\smap -> M.delete address smap)
-  return maybeSocket
   
 {-|
 Create an 'Address' suitable for use with TCP 'Transport's
@@ -123,7 +116,7 @@ correct TCP/IP addresses (or hostnames) for communication.
 -}
 newTCPTransport :: IO Transport
 newTCPTransport = do 
-  bound <- newSocketMap
+  bound <- atomically $ newTVar M.empty
   connected <- newSocketMap
   let transport = TCPTransport {
         boundSockets = bound,
@@ -141,10 +134,34 @@ tcpHandles :: Address -> Bool
 tcpHandles address = tcpScheme == (addressScheme address)
 
 tcpBind :: TCPTransport -> Mailbox -> Address -> IO (Either String Binding)
-tcpBind transport _ address = return $ Right Binding {
-  bindingAddress = address,
-  unbind = tcpUnbind transport address
-  }
+tcpBind transport incoming address = do 
+  listener <- async listenForConenctions
+  return $ Right Binding {
+    bindingAddress = address,
+    unbind = tcpUnbind transport address listener
+    }
+  where
+    listenForConenctions = do
+      socket <- tcpListen
+      acceptConnections socket
+    acceptConnections socket = do
+      _ <- tcpAccept socket
+      acceptConnections socket
+    tcpListen = do
+      let (_,port) = parseTCPAddress address
+      proto <- getProtocolNumber "tcp"
+      bracketOnError
+        (N.socket N.AF_INET N.Stream proto)
+        (sClose)
+        (\sock -> do
+            N.setSocketOption sock N.ReuseAddr 1
+            N.bindSocket sock (N.SockAddrInet port N.iNADDR_ANY)
+            N.listen sock 1024
+            return sock)
+    tcpAccept socket = do
+      (client,_) <- N.accept socket
+      outgoing <- newMailbox
+      return $ newTCPSocket client incoming outgoing
 
 tcpSendTo :: TCPTransport -> Address -> B.ByteString -> IO ()
 tcpSendTo transport address msg = do
@@ -183,18 +200,24 @@ tcpConnect transport address incoming = do
                 return sock)
       newTCPSocket socket incoming outgoing
 
-tcpUnbind :: TCPTransport -> Address -> IO ()
-tcpUnbind transport address = do
-  maybeSocket <- removeSocket (boundSockets transport) address
+tcpUnbind :: TCPTransport -> Address -> Async ()-> IO ()
+tcpUnbind transport address listener = do
+  cancel listener
+  -- maybeSocket <- removeSocket (boundSockets transport) address
+  maybeSocket <- atomically $ do 
+    sockets <- readTVar (boundSockets transport)
+    let maybeSocket = M.lookup address sockets
+    modifyTVar (boundSockets transport) (\smap -> M.delete address smap)
+    return maybeSocket
   case maybeSocket of
     Nothing -> return ()
-    Just socket -> closeTCPSocket socket
+    Just socket -> N.sClose socket
 
 tcpShutdown :: TCPTransport -> IO ()
 tcpShutdown transport = do
   bound <- atomically $ readTVar $ boundSockets transport
   connected <- atomically $ readTVar $ connectedSockets transport
-  mapM_ closeTCPSocket $ M.elems bound
+  mapM_ N.sClose $ M.elems bound
   mapM_ closeTCPSocket $ M.elems connected
   return ()
 
