@@ -1,6 +1,5 @@
 {-# LANGUAGE ExistentialQuantification #-}
 
-
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Network.Endpoints
@@ -23,8 +22,6 @@
 module Network.Endpoints (
   
  --  * Primary API
-  Message,
-  
   Endpoint,
   newEndpoint,
   
@@ -51,16 +48,10 @@ import Network.Transport
 -- external imports
 
 import Control.Concurrent.STM
-import qualified Data.ByteString as B
 import qualified Data.Map as M
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
-
-{-|
-Messages are containers for arbitrary data that may be sent to other 'Endpoint's.
--}
-type Message = B.ByteString
 
 {-|
 Endpoints are a locus of communication, used for sending and receive messages.

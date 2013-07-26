@@ -21,6 +21,7 @@ module Network.Transport (
   Binding(..),
   Mailbox,
   newMailbox,
+  Message,
   Scheme,
   Transport(..),  
   ) where
@@ -37,11 +38,16 @@ import Data.Serialize
 --------------------------------------------------------------------------------
 
 {-|
+Messages are containers for arbitrary data that may be sent to other 'Network.Endpoints.Endpoint's.
+-}
+type Message = B.ByteString
+
+{- |
 A 'Mailbox' is a place where transports can put messages for 'Network.Endpoint.Endpoint's
 to receive.  Typically 'Network.Endpoint.Endpoint's will use the same 'Mailbox' when
 binding or connecting with a 'Transport'.
 -}
-type Mailbox = TQueue B.ByteString
+type Mailbox = TQueue Message
 
 {-|
 Create a new mailbox.
