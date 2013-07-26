@@ -42,7 +42,7 @@ Messages are containers for arbitrary data that may be sent to other 'Network.En
 -}
 type Message = B.ByteString
 
-{- |
+{-|
 A 'Mailbox' is a place where transports can put messages for 'Network.Endpoint.Endpoint's
 to receive.  Typically 'Network.Endpoint.Endpoint's will use the same 'Mailbox' when
 binding or connecting with a 'Transport'.
