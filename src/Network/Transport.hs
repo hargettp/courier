@@ -89,6 +89,6 @@ data Transport = Transport {
   scheme :: String,
   handles :: Address -> Bool,
   bind :: Mailbox -> Address -> IO (Either String Binding),
-  sendTo :: Address -> B.ByteString -> IO (),
+  sendTo :: Address -> Message -> IO (),
   shutdown :: IO ()
   }

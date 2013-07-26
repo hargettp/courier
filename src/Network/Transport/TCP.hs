@@ -62,11 +62,12 @@ findSocket sockets address = do
   smap <- atomically $ readTVar sockets
   return $ M.lookup address smap  
   
--- | insert the socket into the map only if empty, returning the socket
--- that is in the map with a boolean; the bool is true if the socket was 
--- newly inserted, false if no insert was made.  This implies that if true,
--- the returned socket is a new one, and if false, the returned socket
--- is a pre-existing one
+{- | Insert the socket into the map only if empty, returning the socket
+that is in the map with a boolean; the bool is true if the socket was 
+newly inserted, false if no insert was made.  This implies that if true,
+the returned socket is a new one, and if false, the returned socket
+is a pre-existing one
+-}
 putSocketIfAbsent :: SocketMap -> Address -> TCPSocket -> IO (TCPSocket,Bool)
 putSocketIfAbsent sockets address socket = atomically $ do
   smap <- readTVar sockets
@@ -135,13 +136,13 @@ tcpHandles address = tcpScheme == (addressScheme address)
 
 tcpBind :: TCPTransport -> Mailbox -> Address -> IO (Either String Binding)
 tcpBind transport incoming address = do 
-  listener <- async listenForConenctions
+  listener <- async listenForConnections
   return $ Right Binding {
     bindingAddress = address,
     unbind = tcpUnbind transport address listener
     }
   where
-    listenForConenctions = do
+    listenForConnections = do
       socket <- tcpListen
       acceptConnections socket
     acceptConnections socket = do
