@@ -164,7 +164,7 @@ tcpBind transport incoming address = do
       outgoing <- newMailbox
       return $ newTCPSocket client incoming outgoing
 
-tcpSendTo :: TCPTransport -> Address -> B.ByteString -> IO ()
+tcpSendTo :: TCPTransport -> Address -> Message -> IO ()
 tcpSendTo transport address msg = do
   -- yes, we're using an empty mailbox for now; connections aren't really
   -- bidirectional at the moment

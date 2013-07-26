@@ -30,7 +30,6 @@ import Network.Transport
 -- external imports
 
 import Control.Concurrent.STM
-import qualified Data.ByteString as B
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
 
@@ -82,7 +81,7 @@ memoryBind transport mailbox address = do
 memoryHandles :: Address -> Bool
 memoryHandles address = memoryScheme == (addressScheme address)
 
-memorySendTo :: MemoryTransport -> Address -> B.ByteString -> IO ()
+memorySendTo :: MemoryTransport -> Address -> Message -> IO ()
 memorySendTo transport address msg = do
   mailboxes <- atomically $ readTVar $ boundMailboxes transport
   let mailbox = fromJust $ M.lookup address mailboxes
