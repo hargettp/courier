@@ -32,11 +32,13 @@ module Network.Endpoints (
   receiveMessage,
   
   -- * Transports
-  -- | Transports define specific implementations of message-passing techniques (e.g.,
-  -- memory-based, TCP, UDP, HTTP, etc.). Typical use of the 'Endpoint's does not
-  -- require direct use of 'Transport's, beyond creating specific 'Transport's (such as
-  -- found in "Network.Transport.Memory" and "Network.Transport.TCP") and adding
-  -- them to an 'Endpoint'.
+  {-|
+  Transports define specific implementations of message-passing techniques (e.g.,
+  memory-based, TCP, UDP, HTTP, etc.). Typical use of the 'Endpoint's does not
+  require direct use of 'Transport's, beyond creating specific 'Transport's (such as
+  found in "Network.Transport.Memory" and "Network.Transport.TCP") and adding
+  them to an 'Endpoint'.
+  -}
   module Network.Transport
   
   ) where
@@ -78,8 +80,8 @@ newEndpoint trans = do
 
 {-|
 Binding an 'Endpoint' to an 'Address' prepares the 'Endpoint' to receive
-messages sent to the bound address.  Upon success, the result will be @Left ()@, but
-if failed, @Right text-of-error-message@.
+messages sent to the bound address.  Upon success, the result will be @Right ()@, but
+if failed, @Left text-of-error-message@.
 -}
 bindEndpoint :: Endpoint -> Address -> IO (Either String ())
 bindEndpoint endpoint address = do 
@@ -101,8 +103,8 @@ Unbind an 'Endpoint' form an 'Address', after which the 'Endpoint' will eventual
 receive messages sent to that 'Address'. Note that there is no guarantee that after 'Unbind'
 succeeds that additional messages to that 'Address' will not be delivered: the only guarantee
 is that eventually messages will no longer be delivered.
-Upon success, the result will be @Left ()@ but
-if failed, @Right text-of-error-message@.
+Upon success, the result will be @Right ()@ but
+if failed, @Left text-of-error-message@.
 -}
 unbindEndpoint :: Endpoint -> Address -> IO (Either String ())
 unbindEndpoint endpoint address = do
@@ -115,7 +117,10 @@ unbindEndpoint endpoint address = do
       return $ Right ()
 
 {-|
-Send a 'Message' to specific 'Address' via the indicated 'Endpoint'.
+Send a 'Message' to specific 'Address' via the indicated 'Endpoint'. While a successful
+response (indicated by returning @Right ()@) indicates that there was no error initiating
+transport of the message, success does not guarantee that an 'Endpoint' received the message.
+Failure initiating transport is indicated by returning @Left text-of-error-message@.
 -}
 sendMessage :: Endpoint -> Address -> Message -> IO (Either String ())
 sendMessage endpoint address msg  = do
@@ -126,7 +131,6 @@ sendMessage endpoint address msg  = do
     Just transport -> do 
       sendTo transport address msg
       return $ Right ()
-
 
 {-|
 Receive the next 'Message' sent to the 'Endpoint'.
