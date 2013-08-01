@@ -1,9 +1,9 @@
-module TestMemory (tests) where
+module TestTCP (tests) where
 
 -- local imports
 
 import Network.Endpoints
-import Network.Transport.Memory
+import Network.Transport.TCP
 
 -- external imports
 
@@ -20,32 +20,32 @@ import Test.Framework.Providers.HUnit
 tests :: [Test.Framework.Test]
 tests = 
   [
-    testCase "mem-endpoints+transport" testEndpointTransport,
-    testCase "mem-bind" testEndpointBind,
-    testCase "mem-unbind" testEndpointBindUnbind,
-    testCase "mem-sendReceive" testEndpointSendReceive,
-    testCase "mem-transport" testMemoryTransport
+    testCase "tcp-endpoints+transport" testEndpointTransport,
+    testCase "tcp-bind" testEndpointBind,
+    testCase "tcp-unbind" testEndpointBindUnbind,
+    testCase "tcp-sendReceive" testEndpointSendReceive
+    -- testCase "tcp-transport" testTCPTransport
   ] 
   
 testEndpointTransport :: Assertion  
 testEndpointTransport = do  
-  transport <- newMemoryTransport
+  transport <- newTCPTransport
   _ <- newEndpoint [transport]
   return ()
   
 testEndpointBind :: Assertion
 testEndpointBind = do  
-  transport <- newMemoryTransport
+  transport <- newTCPTransport
   endpoint <- newEndpoint [transport]
-  let address = newMemoryAddress "endpoint1"
+  let address = newTCPAddress "localhost:2000"
   Right () <- bindEndpoint endpoint address
   return ()
 
 testEndpointBindUnbind :: Assertion
 testEndpointBindUnbind = do  
-  transport <- newMemoryTransport
+  transport <- newTCPTransport
   endpoint <- newEndpoint [transport]
-  let address = newMemoryAddress "endpoint1"
+  let address = newTCPAddress "localhost:2000"
   Right () <- bindEndpoint endpoint address
   unbound <- unbindEndpoint endpoint address
   case unbound of
@@ -55,11 +55,11 @@ testEndpointBindUnbind = do
   
 testEndpointSendReceive :: Assertion  
 testEndpointSendReceive = do
-  transport <- newMemoryTransport
+  transport <- newTCPTransport
   endpoint1 <- newEndpoint [transport]
   endpoint2 <- newEndpoint [transport]
-  let address1 = newMemoryAddress "endpoint1"
-      address2 = newMemoryAddress "endpoint2"
+  let address1 = newTCPAddress "localhost:2000"
+      address2 = newTCPAddress "localhost:2001"
   Right () <- bindEndpoint endpoint1 address1
   Right () <- bindEndpoint endpoint2 address2
   _ <- sendMessage endpoint1 address2 $ encode "hello!"
@@ -67,10 +67,10 @@ testEndpointSendReceive = do
   assertEqual "Received message not same as sent" (Right "hello!") (decode msg)
   return ()
   
--- Memory tests
+-- -- Memory tests
   
-testMemoryTransport :: Assertion
-testMemoryTransport = do
-  _ <- newMemoryTransport
-  return ()
+-- testMemoryTransport :: Assertion
+-- testMemoryTransport = do
+--   _ <- newTCPTransport
+--   return ()
 

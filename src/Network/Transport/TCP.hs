@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -30,54 +31,29 @@ import Network.Transport
 
 import Control.Concurrent.Async
 import Control.Concurrent.STM
-import Control.Exception (bracketOnError)
 
 import qualified Data.ByteString as B
 import qualified Data.Map as M
 import qualified Data.Text as T
 import Data.Serialize
 
-import Network hiding (sendTo)
-import Network.BSD (getHostByName,hostAddress,getProtocolNumber)
-import qualified Network.Socket as N
-import qualified Network.Socket.ByteString as S
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
+import GHC.Generics
 
-tcpScheme :: Scheme
-tcpScheme = "tcp"
+import Network.Socket (HostName,ServiceName,Socket,sClose,accept)
+import Network.Simple.TCP hiding (accept)
+
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 data TCPTransport = TCPTransport {
-  boundSockets :: TVar (M.Map Address N.Socket),
-  connectedSockets :: SocketMap
+  tcpListeners :: TVar (M.Map ServiceName Socket),
+  tcpMessengers :: TVar (M.Map Address Messenger)
   }
                     
-type SocketMap = TVar (M.Map Address TCPSocket)
+data IdentifyMessage = IdentifyMessage Address deriving (Generic)
 
-newSocketMap :: IO SocketMap
-newSocketMap = atomically $ newTVar M.empty
+instance Serialize IdentifyMessage
 
-findSocket :: SocketMap -> Address -> IO (Maybe TCPSocket)
-findSocket sockets address = do
-  smap <- atomically $ readTVar sockets
-  return $ M.lookup address smap  
-  
-{- | Insert the socket into the map only if empty, returning the socket
-that is in the map with a boolean; the bool is true if the socket was 
-newly inserted, false if no insert was made.  This implies that if true,
-the returned socket is a new one, and if false, the returned socket
-is a pre-existing one
--}
-putSocketIfAbsent :: SocketMap -> Address -> TCPSocket -> IO (TCPSocket,Bool)
-putSocketIfAbsent sockets address socket = atomically $ do
-  smap <- readTVar sockets
-  let maybeExisting = M.lookup address smap
-  case maybeExisting of
-    Just existing -> return (existing,False)
-    Nothing -> do
-      modifyTVar sockets (\socks -> M.insert address socket socks)
-      return (socket,True)
-  
 {-|
 Create an 'Address' suitable for use with TCP 'Transport's
 -}
@@ -88,28 +64,6 @@ newTCPAddress address = Address {
   }
                         
 {-|
-Parse a TCP 'Address' into its respective 'HostName' and 'PortNumber' components, on the
-assumption the 'Address' has an identifer in the format @host:port@. If
-the port number is missing from the supplied address, it will default to 0.  If the
-hostname component is missing from the identifier (e.g., just @:port@), then hostname
-is assumed to be @localhost@.
--}
-parseTCPAddress :: Address -> (HostName,PortNumber)
-parseTCPAddress address = 
-  if tcpHandles address then
-    let identifer = T.pack $ addressIdentifier address 
-        parts = T.splitOn ":" identifer
-    in if (length parts) > 1 then
-         (host $ T.unpack $ parts !! 0, port $ T.unpack $ parts !! 1)
-       else (host $ T.unpack $ parts !! 0, 0)
-    else error $ "Not a TCP addres: " ++ (show address)
-  where
-    host h = if h == "" then
-               "localhost"
-             else h
-    port p = fromIntegral (read p :: Int)
-
-{-|
 Create a new 'Transport' suitable for sending messages over TCP/IP.  There can
 be multiple instances of these 'Transport's: 'Network.Endpoints.Endpoint' using
 different instances will still be able to communicate, provided they use
@@ -117,11 +71,11 @@ correct TCP/IP addresses (or hostnames) for communication.
 -}
 newTCPTransport :: IO Transport
 newTCPTransport = do 
-  bound <- atomically $ newTVar M.empty
-  connected <- newSocketMap
+  listeners <- atomically $ newTVar M.empty
+  messengers <- atomically $ newTVar M.empty
   let transport = TCPTransport {
-        boundSockets = bound,
-        connectedSockets = connected
+        tcpListeners = listeners,
+        tcpMessengers = messengers
         }
   return Transport {
       scheme = tcpScheme,
@@ -131,144 +85,138 @@ newTCPTransport = do
       shutdown = tcpShutdown transport
       }
 
+--------------------------------------------------------------------------------
+                        
+{-|
+Parse a TCP 'Address' into its respective 'HostName' and 'PortNumber' components, on the
+assumption the 'Address' has an identifer in the format @host:port@. If
+the port number is missing from the supplied address, it will default to 0.  If the
+hostname component is missing from the identifier (e.g., just @:port@), then hostname
+is assumed to be @localhost@.
+-}
+parseTCPAddress :: Address -> (HostName,ServiceName)
+parseTCPAddress address = 
+  if tcpHandles address then
+    let identifer = T.pack $ addressIdentifier address 
+        parts = T.splitOn ":" identifer
+    in if (length parts) > 1 then
+         (host $ T.unpack $ parts !! 0, port $ T.unpack $ parts !! 1)
+       else (host $ T.unpack $ parts !! 0, "0")
+    else error $ "Not a TCP addres: " ++ (show address)
+  where
+    host h = if h == "" then
+               "localhost"
+             else h
+    port p = p
+
+tcpScheme :: Scheme
+tcpScheme = "tcp"
+
 tcpHandles :: Address -> Bool
-tcpHandles address = tcpScheme == (addressScheme address)
+tcpHandles address = (addressScheme address) == tcpScheme
 
 tcpBind :: TCPTransport -> Mailbox -> Address -> IO (Either String Binding)
-tcpBind transport incoming address = do 
-  listener <- async listenForConnections
+tcpBind transport inc address = do  
+  let (_,port) = parseTCPAddress address
+  listener <- async $ tcpListen port
   return $ Right Binding {
     bindingAddress = address,
-    unbind = tcpUnbind transport address listener
+    unbind = tcpUnbind listener
     }
   where
-    listenForConnections = do
-      socket <- tcpListen
-      acceptConnections socket
-    acceptConnections socket = do
-      _ <- tcpAccept socket
-      acceptConnections socket
-    tcpListen = do
-      let (_,port) = parseTCPAddress address
-      proto <- getProtocolNumber "tcp"
-      bracketOnError
-        (N.socket N.AF_INET N.Stream proto)
-        (sClose)
-        (\sock -> do
-            N.setSocketOption sock N.ReuseAddr 1
-            N.bindSocket sock (N.SockAddrInet port N.iNADDR_ANY)
-            N.listen sock 1024
-            return sock)
+    tcpListen port = listen HostAny port $ \(socket,_) -> tcpAccept socket
     tcpAccept socket = do
-      (client,_) <- N.accept socket
-      outgoing <- newMailbox
-      return $ newTCPSocket client incoming outgoing
+      (client,_) <- accept socket
+      _ <- async $ tcpDispatch client
+      tcpAccept socket
+    tcpDispatch client = do
+      identity <- tcpIdentify client
+      case identity of
+        Nothing -> sClose client
+        Just (IdentifyMessage clientAddress) -> do
+          msngr <- newMessenger client clientAddress inc
+          found <- atomically $ do 
+            msngrs <- readTVar $ tcpMessengers transport
+            return $ M.lookup clientAddress msngrs
+          case found of
+            Just _ -> closeMessenger msngr
+            Nothing -> do
+              atomically $ do 
+                modifyTVar (tcpMessengers transport) $ (\msngrs -> M.insert address msngr msngrs)
+    tcpIdentify client = do
+      maybeMsg <- receiveMessage client
+      case maybeMsg of
+        Nothing -> return Nothing
+        Just bytes -> do
+          let msg = decode bytes
+          case msg of
+            Left _ -> return Nothing
+            Right message -> return $ Just message
+    tcpUnbind listener = cancel listener
 
 tcpSendTo :: TCPTransport -> Address -> Message -> IO ()
 tcpSendTo transport address msg = do
-  -- yes, we're using an empty mailbox for now; connections aren't really
-  -- bidirectional at the moment
-  incoming <- newMailbox
-  socket <- tcpConnect transport address incoming
-  atomically $ writeTQueue (socketOutgoing socket) msg
-  return ()
-  
--- | Either a connect a new socket, or find an existing socket to reuse
-tcpConnect :: TCPTransport -> Address -> Mailbox -> IO TCPSocket
-tcpConnect transport address incoming = do
-  maybeExisting <- findSocket (connectedSockets transport) address
-  case maybeExisting of
-    Just connection -> return connection
-    Nothing -> do
-      connection <- connect
-      (existing,new) <- putSocketIfAbsent (connectedSockets transport) address connection
-      if new 
-        then return existing
-        else do
-             closeTCPSocket connection
-             return existing
-  where 
-    connect = do
-      let (host,port) = parseTCPAddress address
-      proto <- getProtocolNumber "tcp"
-      outgoing <- newMailbox
-      socket <- bracketOnError
-            (N.socket N.AF_INET N.Stream proto)
-            (N.sClose)  -- only done if there's an error
-            (\sock -> do
-                he <- getHostByName host
-                N.connect sock (N.SockAddrInet port (hostAddress he))
-                return sock)
-      newTCPSocket socket incoming outgoing
-
-tcpUnbind :: TCPTransport -> Address -> Async ()-> IO ()
-tcpUnbind transport address listener = do
-  cancel listener
-  -- maybeSocket <- removeSocket (boundSockets transport) address
-  maybeSocket <- atomically $ do 
-    sockets <- readTVar (boundSockets transport)
-    let maybeSocket = M.lookup address sockets
-    modifyTVar (boundSockets transport) (\smap -> M.delete address smap)
-    return maybeSocket
-  case maybeSocket of
+  amsngr <- atomically $ do 
+    msngrs <- readTVar $ tcpMessengers transport
+    return $ M.lookup address msngrs
+  case amsngr of
     Nothing -> return ()
-    Just socket -> N.sClose socket
+    Just msngr -> atomically $ writeTQueue (messengerOut msngr) msg 
 
 tcpShutdown :: TCPTransport -> IO ()
-tcpShutdown transport = do
-  bound <- atomically $ readTVar $ boundSockets transport
-  connected <- atomically $ readTVar $ connectedSockets transport
-  mapM_ N.sClose $ M.elems bound
-  mapM_ closeTCPSocket $ M.elems connected
-  return ()
+tcpShutdown _ = return ()
 
-data TCPSocket = TCPSocket {
-  tcpSocket :: Socket,
-  socketOutgoing :: Mailbox,
-  socketMessenger :: Async ()
+data Messenger = Messenger {
+  messengerOut :: Mailbox,
+  messengerAddress :: Address,
+  messengerSender :: Async (),
+  messengerReceiver :: Async (),
+  messengerSocket :: Socket
   }
                  
-newTCPSocket :: Socket -> Mailbox -> Mailbox -> IO TCPSocket                 
-newTCPSocket socket incoming outgoing = do
-  msgr <- messenger socket incoming outgoing
-  return TCPSocket {
-    tcpSocket = socket,
-    socketOutgoing = outgoing,
-    socketMessenger = msgr
+newMessenger :: Socket -> Address -> Mailbox -> IO Messenger                 
+newMessenger socket address inc = do
+  out <- newMailbox
+  sndr <- async $ sender socket out
+  rcvr <- async $ receiver socket inc
+  return Messenger {
+    messengerOut = out,
+    messengerAddress = address,
+    messengerSender = sndr,
+    messengerReceiver = rcvr,
+    messengerSocket = socket
     }
-    
-closeTCPSocket :: TCPSocket -> IO ()
-closeTCPSocket socket = do
-  sClose (tcpSocket socket)
-  cancel $ socketMessenger socket
-    
-{-|    
-A messenger spawns separate 'Async's to send and receive messages
-over the socket, as well a separate 'Async' for itsel.  If either the sender or 
-receiver hit an exception, or if the messenger''s 'Async' hits an exception,
-then all 3 will be 'cancel'led.
--}
-messenger :: Socket -> Mailbox -> Mailbox -> IO (Async ())    
-messenger socket incoming outgoing = async $ do
-  _ <- concurrently (sender socket outgoing) (receiver socket incoming)
-  return ()
                  
+closeMessenger :: Messenger -> IO ()                 
+closeMessenger msngr = do
+  cancel $ messengerSender msngr
+  cancel $ messengerReceiver msngr
+  sClose $ messengerSocket msngr
+
 sender :: Socket -> Mailbox -> IO ()
-sender socket mailbox = send
+sender socket mailbox = sendMessages
   where
-    send = do
+    sendMessages = do
       msg <- atomically $ readTQueue mailbox
-      S.sendAll socket $ encode (B.length msg)
-      S.sendAll socket msg
-      send
+      send socket $ encode (B.length msg)
+      send socket msg
+      sendMessages
 
 receiver :: Socket -> Mailbox -> IO ()
-receiver socket mailbox  = receive
+receiver socket mailbox  = receiveMessages
   where
-    receive = do
-      len <- S.recv socket 4 -- TODO must figure out what defines length of an integer in bytes 
-      msg <- S.recv socket $ msgLength (decode len)
-      atomically $ writeTQueue mailbox msg
-      receive
+    receiveMessages = do
+      maybeMsg <- receiveMessage socket
+      case maybeMsg of
+        Nothing -> return ()
+        Just msg -> atomically $ writeTQueue mailbox msg
+        
+receiveMessage :: Socket -> IO (Maybe Message)    
+receiveMessage socket = do
+  maybeLen <- recv socket 8 -- TODO must figure out what defines length of an integer in bytes 
+  case maybeLen of
+    Nothing -> return Nothing
+    Just len -> recv socket $ msgLength (decode len)
+  where
     msgLength (Right size) = size
     msgLength (Left err) = error err

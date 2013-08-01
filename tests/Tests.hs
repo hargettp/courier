@@ -13,6 +13,7 @@ import Test.Framework.Providers.QuickCheck2
 
 -- Test modules
 import qualified TestMemory as M
+import qualified TestTCP as T
 
 -----------------------------------------------------------------------------
 -----------------------------------------------------------------------------
@@ -28,6 +29,7 @@ tests =
     testCase "endpoints" testEndpoint
   ] 
   ++ M.tests
+  ++ T.tests
   -- ++ D.tests
   -- ++ S.tests
 
