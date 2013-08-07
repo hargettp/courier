@@ -31,6 +31,7 @@ library
                        bytestring,
                        cereal,
                        containers,
+                       hslogger,
                        network,
                        network-simple,
                        stm,
@@ -54,6 +55,9 @@ Test-Suite test-courier
         -- 3rd party modules
         async,
         cereal,
+        directory,
+        hslogger,
+        stm,
         -- this project's modules
         courier
 

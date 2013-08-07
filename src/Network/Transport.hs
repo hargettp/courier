@@ -19,6 +19,7 @@
 module Network.Transport (
   Address(..),
   Binding(..),
+  Envelope(..),
   Mailbox,
   newMailbox,
   Message,
@@ -42,6 +43,13 @@ Messages are containers for arbitrary data that may be sent to other 'Network.En
 -}
 type Message = B.ByteString
 
+data Envelope = Envelope {
+  envelopeDestination :: Address,
+  envelopeContents :: Message
+  } deriving (Eq,Show,Generic)
+
+instance Serialize Envelope
+
 {-|
 A 'Mailbox' is a place where transports can put messages for 'Network.Endpoint.Endpoint's
 to receive.  Typically 'Network.Endpoint.Endpoint's will use the same 'Mailbox' when
@@ -62,7 +70,7 @@ will handle attempts to 'connect' or 'bind' to an 'Address'.
 -}
 data Address = Address {
   addressScheme :: String,
-  addressIdentifier :: String
+  addressLocation :: String
   } deriving (Eq,Show,Ord,Generic)
 
 instance Serialize Address

@@ -50,6 +50,7 @@ import Network.Transport
 -- external imports
 
 import Control.Concurrent.STM
+
 import qualified Data.Map as M
 
 --------------------------------------------------------------------------------

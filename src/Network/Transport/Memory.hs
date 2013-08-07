@@ -45,7 +45,7 @@ Create an 'Address' suitable for use with memory 'Transport's
 newMemoryAddress :: String -> Address
 newMemoryAddress address = Address {
   addressScheme = memoryScheme,
-  addressIdentifier = address
+  addressLocation = address
   }
 
 data MemoryTransport = MemoryTransport {
