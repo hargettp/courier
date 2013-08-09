@@ -127,7 +127,6 @@ parseTCPAddress address =
 tcpScheme :: Scheme
 tcpScheme = "tcp"
 
--- TODO should be IO
 tcpHandles :: TCPTransport -> Name -> IO Bool
 tcpHandles transport name = do 
   resolved <- resolve (tcpResolver transport) name
@@ -171,7 +170,8 @@ tcpBind transport inc name = do
             Just _ -> closeMessenger msngr
             Nothing -> do
               atomically $ do 
-                modifyTVar (tcpMessengers transport) $ (\msngrs -> M.insert address msngr msngrs)
+                modifyTVar (tcpMessengers transport) $ (\msngrs -> M.insert clientAddress msngr msngrs)
+              infoM _log $ "Added incoming messenger for " ++ (show clientAddress)
     tcpIdentify client clientAddress = do
       infoM _log $ "Awaiting identity from " ++ (show clientAddress)
       maybeMsg <- receiveMessage client
@@ -204,8 +204,7 @@ tcpSendTo transport name msg = do
       infoM _log $ "Connected to " ++ (show address)
       msngr <- newMessenger socket address (tcpInbound transport)
       atomically $ 
-        modifyTVar (tcpMessengers transport) $ \msngrs ->
-        M.insert address msngr msngrs
+        modifyTVar (tcpMessengers transport) $ \msngrs -> M.insert address msngr msngrs
       deliver msngr $ encode $ IdentifyMessage address
       deliver msngr env
       return ()
@@ -214,7 +213,16 @@ tcpSendTo transport name msg = do
       deliver msngr message = atomically $ writeTQueue (messengerOut msngr) message
 
 tcpShutdown :: TCPTransport -> IO ()
-tcpShutdown _ = return ()
+tcpShutdown transport = do
+  infoM _log $ "Closing messengers"
+  msngrs <- atomically $ readTVar $ tcpMessengers transport
+  mapM_ closeMessenger $ M.elems msngrs
+  infoM _log $ "Closing listeners"
+  listeners <- atomically $ readTVar $ tcpListeners transport
+  mapM_ sClose $ M.elems listeners
+  infoM _log $ "Closing dispatcher"
+  cancel $ tcpDispatcher transport
+  return ()
 
 data Messenger = Messenger {
   messengerOut :: Mailbox,
