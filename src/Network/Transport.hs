@@ -23,6 +23,10 @@ module Network.Transport (
   Mailbox,
   newMailbox,
   Message,
+  Name,
+  Resolver,
+  resolve,
+  resolverFromList,
   Scheme,
   Transport(..),  
   ) where
@@ -31,9 +35,11 @@ module Network.Transport (
 
 -- external imports
 import Control.Concurrent.STM
+
 import Data.ByteString as B
-import GHC.Generics
 import Data.Serialize
+
+import GHC.Generics
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -43,8 +49,19 @@ Messages are containers for arbitrary data that may be sent to other 'Network.En
 -}
 type Message = B.ByteString
 
+{-|
+Name for uniquely identifying an 'Endpoint'; suitable for identifying
+the target destination for a 'Message'.
+
+-}
+type Name = String
+
+{-|
+An 'Envelope' is a container for a 'Message' with the 'Address' of the 'Message''s destination.
+
+-}
 data Envelope = Envelope {
-  envelopeDestination :: Address,
+  envelopeDestination :: Name,
   envelopeContents :: Message
   } deriving (Eq,Show,Generic)
 
@@ -85,7 +102,7 @@ Bindings are a site for receiving messages on a particular 'Address'
 through a 'Transport'.
 -}
 data Binding = Binding {
-  bindingAddress :: Address,
+  bindingName :: Name,
   unbind :: IO ()
   }
 
@@ -95,8 +112,30 @@ between 'Endpoint's.
 -}
 data Transport = Transport {
   scheme :: String,
-  handles :: Address -> Bool,
-  bind :: Mailbox -> Address -> IO (Either String Binding),
-  sendTo :: Address -> Message -> IO (),
+  handles :: Name -> IO Bool,
+  bind :: Mailbox -> Name -> IO (Either String Binding),
+  sendTo :: Name -> Message -> IO (),
   shutdown :: IO ()
   }
+
+{-|
+A 'Resolver' translates a name into an 'Address', if possible. 
+'Transport's may find resolvers useful for determing
+where to reach a specific 'Endpoint', given it''s 'Name'.
+-}
+newtype Resolver = Resolver (Name -> IO (Maybe Address))
+
+{-|
+Ask the 'Resolver' to find one or more 'Address'es for the provided
+'Name', if any are available from this resolver.
+
+-}
+resolve :: Resolver -> Name -> IO (Maybe Address)
+resolve (Resolver resolver) name = resolver name
+
+{-|
+A simple 'Resolver' that accepts an association list of 'Name's to 'Address'es
+and returns the addresses associated with a given name in the list.
+-}
+resolverFromList :: [(Name,Address)] -> Resolver
+resolverFromList addresses = Resolver (\name -> return $ lookup name addresses)

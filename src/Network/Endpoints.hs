@@ -60,8 +60,8 @@ import qualified Data.Map as M
 Endpoints are a locus of communication, used for sending and receive messages.
 -}
 data Endpoint = Endpoint {
-  endpointTransports :: TVar (M.Map Scheme Transport),
-  endpointBindings :: TVar (M.Map Address Binding),
+  endpointTransports :: TVar [Transport],
+  endpointBindings :: TVar (M.Map Name Binding),
   endpointMailbox :: Mailbox
   }
 
@@ -70,7 +70,7 @@ Create a new 'Endpoint' using the provided transports.
 -}
 newEndpoint :: [Transport] -> IO Endpoint
 newEndpoint trans = do
-  transports <- atomically $ newTVar $ M.fromList $ map (\t -> ((scheme t),t)) trans
+  transports <- atomically $ newTVar trans
   bindings <- atomically $ newTVar M.empty
   mailbox <- atomically $ newTQueue
   return Endpoint {
@@ -84,19 +84,18 @@ Binding an 'Endpoint' to an 'Address' prepares the 'Endpoint' to receive
 messages sent to the bound address.  Upon success, the result will be @Right ()@, but
 if failed, @Left text-of-error-message@.
 -}
-bindEndpoint :: Endpoint -> Address -> IO (Either String ())
-bindEndpoint endpoint address = do 
-  transports <- atomically $ readTVar $ endpointTransports endpoint
-  let maybeTransport = M.lookup (addressScheme address)  transports
+bindEndpoint :: Endpoint -> Name -> IO (Either String ())
+bindEndpoint endpoint name = do 
+  maybeTransport <- findTransport endpoint name
   case maybeTransport of
-    Nothing -> return $ Left $ "No transport to handle address: " ++ (show address)
+    Nothing -> return $ Left $ "No transport to handle name: " ++ (show name)
     Just transport -> do
-      eitherBinding <- bind transport (endpointMailbox endpoint) address
+      eitherBinding <- bind transport (endpointMailbox endpoint) name
       case eitherBinding of
         Left err -> return $ Left err
         Right binding -> do 
           atomically $ modifyTVar (endpointBindings endpoint)
-            (\bindings -> M.insert address binding bindings)
+            (\bindings -> M.insert name binding bindings)
           return $ Right ()
 
 {-|
@@ -107,12 +106,12 @@ is that eventually messages will no longer be delivered.
 Upon success, the result will be @Right ()@ but
 if failed, @Left text-of-error-message@.
 -}
-unbindEndpoint :: Endpoint -> Address -> IO (Either String ())
-unbindEndpoint endpoint address = do
+unbindEndpoint :: Endpoint -> Name -> IO (Either String ())
+unbindEndpoint endpoint name = do
   bindings <- atomically $ readTVar $ endpointBindings endpoint
-  let maybeBinding = M.lookup address bindings
+  let maybeBinding = M.lookup name bindings
   case maybeBinding of
-    Nothing -> return $ Left $ "Endpoint not bound to address: " ++ (show address)
+    Nothing -> return $ Left $ "Endpoint not bound to address: " ++ (show name)
     Just binding -> do 
       unbind binding
       return $ Right ()
@@ -123,14 +122,13 @@ response (indicated by returning @Right ()@) indicates that there was no error i
 transport of the message, success does not guarantee that an 'Endpoint' received the message.
 Failure initiating transport is indicated by returning @Left text-of-error-message@.
 -}
-sendMessage :: Endpoint -> Address -> Message -> IO (Either String ())
-sendMessage endpoint address msg  = do
-  transports <- atomically $ readTVar $ endpointTransports endpoint
-  let maybeTransport = M.lookup (addressScheme address)  transports
+sendMessage :: Endpoint -> Name -> Message -> IO (Either String ())
+sendMessage endpoint name msg  = do
+  maybeTransport <- findTransport endpoint name
   case maybeTransport of
-    Nothing -> return $ Left $ "No transport to handle address: " ++ (show address)
+    Nothing -> return $ Left $ "No transport to handle name: " ++ (show name)
     Just transport -> do 
-      sendTo transport address msg
+      sendTo transport name msg
       return $ Right ()
 
 {-|
@@ -139,3 +137,15 @@ Receive the next 'Message' sent to the 'Endpoint'.
 receiveMessage :: Endpoint -> IO Message
 receiveMessage endpoint = atomically $ readTQueue $ endpointMailbox endpoint
 
+findTransport :: Endpoint -> Name -> IO (Maybe Transport)
+findTransport endpoint name = do
+  transports <- atomically $ readTVar $ endpointTransports endpoint
+  findM canHandle transports
+    where
+      canHandle transport = (handles transport) name
+      findM mf (a:as) = do
+        result <- mf a
+        if result
+          then return $ Just a
+          else findM mf as
+      findM _ [] = return Nothing

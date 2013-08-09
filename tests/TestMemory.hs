@@ -35,19 +35,19 @@ testEndpointTransport = do
   
 testEndpointBind :: Assertion
 testEndpointBind = do  
+  let name1 = "endpoint1"
   transport <- newMemoryTransport
   endpoint <- newEndpoint [transport]
-  let address = newMemoryAddress "endpoint1"
-  Right () <- bindEndpoint endpoint address
+  Right () <- bindEndpoint endpoint name1
   return ()
 
 testEndpointBindUnbind :: Assertion
 testEndpointBindUnbind = do  
+  let name1 = "endpoint1"
   transport <- newMemoryTransport
   endpoint <- newEndpoint [transport]
-  let address = newMemoryAddress "endpoint1"
-  Right () <- bindEndpoint endpoint address
-  unbound <- unbindEndpoint endpoint address
+  Right () <- bindEndpoint endpoint name1
+  unbound <- unbindEndpoint endpoint name1
   case unbound of
     Left err -> assertFailure $ "Unbind failed: " ++ err
     Right () -> assertBool "Unbind succeeded" True
@@ -55,14 +55,14 @@ testEndpointBindUnbind = do
   
 testEndpointSendReceive :: Assertion  
 testEndpointSendReceive = do
+  let name1 = "endpoint1"
+      name2 = "endpoint2"
   transport <- newMemoryTransport
   endpoint1 <- newEndpoint [transport]
   endpoint2 <- newEndpoint [transport]
-  let address1 = newMemoryAddress "endpoint1"
-      address2 = newMemoryAddress "endpoint2"
-  Right () <- bindEndpoint endpoint1 address1
-  Right () <- bindEndpoint endpoint2 address2
-  _ <- sendMessage endpoint1 address2 $ encode "hello!"
+  Right () <- bindEndpoint endpoint1 name1
+  Right () <- bindEndpoint endpoint2 name2
+  _ <- sendMessage endpoint1 name2 $ encode "hello!"
   msg <- receiveMessage endpoint2    
   assertEqual "Received message not same as sent" (Right "hello!") (decode msg)
   return ()

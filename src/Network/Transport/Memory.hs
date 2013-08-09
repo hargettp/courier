@@ -49,7 +49,7 @@ newMemoryAddress address = Address {
   }
 
 data MemoryTransport = MemoryTransport {
-  boundMailboxes :: TVar (M.Map Address Mailbox)
+  boundMailboxes :: TVar (M.Map Name Mailbox)
   }
                        
 {-|
@@ -63,31 +63,32 @@ newMemoryTransport = do
         }
   return Transport {
       scheme = memoryScheme,
-      handles = memoryHandles,
+      handles = memoryHandles transport,
       bind = memoryBind transport,
       sendTo = memorySendTo transport,
       shutdown = return ()
       }
 
-memoryBind :: MemoryTransport -> Mailbox -> Address -> IO (Either String Binding)
-memoryBind transport mailbox address = do
+memoryBind :: MemoryTransport -> Mailbox -> Name -> IO (Either String Binding)
+memoryBind transport mailbox name = do
   atomically $ modifyTVar (boundMailboxes transport) 
-    (\mailboxes -> M.insert address mailbox mailboxes)
+    (\mailboxes -> M.insert name mailbox mailboxes)
   return $ Right Binding {
-    bindingAddress = address,
-    unbind = memoryUnbind transport address
+    bindingName = name,
+    unbind = memoryUnbind transport name
     }
                                        
-memoryHandles :: Address -> Bool
-memoryHandles address = memoryScheme == (addressScheme address)
+memoryHandles :: MemoryTransport -> Name -> IO Bool
+-- memoryHandles transport name = True
+memoryHandles _ _ = return True
 
-memorySendTo :: MemoryTransport -> Address -> Message -> IO ()
-memorySendTo transport address msg = do
+memorySendTo :: MemoryTransport -> Name -> Message -> IO ()
+memorySendTo transport name msg = do
   mailboxes <- atomically $ readTVar $ boundMailboxes transport
-  let mailbox = fromJust $ M.lookup address mailboxes
+  let mailbox = fromJust $ M.lookup name mailboxes
   atomically $ writeTQueue mailbox msg
 
-memoryUnbind :: MemoryTransport -> Address -> IO ()
-memoryUnbind transport address = do
+memoryUnbind :: MemoryTransport -> Name -> IO ()
+memoryUnbind transport name = do
   atomically $ modifyTVar (boundMailboxes transport) deleteBinding
-  where deleteBinding m = M.delete address m
+  where deleteBinding m = M.delete name m

@@ -53,10 +53,11 @@ _log = "transport.tcp"
 
 data TCPTransport = TCPTransport {
   tcpListeners :: TVar (M.Map ServiceName Socket),
-  tcpMessengers :: TVar (M.Map Address Messenger),
-  tcpBindings :: TVar (M.Map Address Mailbox),
+  tcpMessengers :: TVar (M.Map Address Messenger),  
+  tcpBindings :: TVar (M.Map Name Mailbox),
   tcpInbound :: Mailbox,
-  tcpDispatcher :: Async ()
+  tcpDispatcher :: Async (),
+  tcpResolver :: Resolver
   }
                     
 data IdentifyMessage = IdentifyMessage Address deriving (Generic)
@@ -78,8 +79,8 @@ be multiple instances of these 'Transport's: 'Network.Endpoints.Endpoint' using
 different instances will still be able to communicate, provided they use
 correct TCP/IP addresses (or hostnames) for communication.
 -}
-newTCPTransport :: IO Transport
-newTCPTransport = do 
+newTCPTransport :: Resolver -> IO Transport
+newTCPTransport resolver = do 
   listeners <- atomically $ newTVar M.empty
   messengers <- atomically $ newTVar M.empty
   bindings <- atomically $ newTVar M.empty
@@ -90,11 +91,12 @@ newTCPTransport = do
         tcpMessengers = messengers,
         tcpBindings = bindings,
         tcpInbound = inbound,
-        tcpDispatcher = dispatch
+        tcpDispatcher = dispatch,
+        tcpResolver = resolver
         }
   return Transport {
       scheme = tcpScheme,
-      handles = tcpHandles,
+      handles = tcpHandles transport,
       bind = tcpBind transport,
       sendTo = tcpSendTo transport,
       shutdown = tcpShutdown transport
@@ -111,13 +113,11 @@ is assumed to be @localhost@.
 -}
 parseTCPAddress :: Address -> (HostName,ServiceName)
 parseTCPAddress address = 
-  if tcpHandles address then
-    let identifer = T.pack $ addressLocation address 
-        parts = T.splitOn ":" identifer
-    in if (length parts) > 1 then
-         (host $ T.unpack $ parts !! 0, port $ T.unpack $ parts !! 1)
-       else (host $ T.unpack $ parts !! 0, "0")
-    else error $ "Not a TCP addres: " ++ (show address)
+  let identifer = T.pack $ addressLocation address 
+      parts = T.splitOn ":" identifer
+  in if (length parts) > 1 then
+       (host $ T.unpack $ parts !! 0, port $ T.unpack $ parts !! 1)
+     else (host $ T.unpack $ parts !! 0, "0")
   where
     host h = if h == "" then
                "localhost"
@@ -127,29 +127,36 @@ parseTCPAddress address =
 tcpScheme :: Scheme
 tcpScheme = "tcp"
 
-tcpHandles :: Address -> Bool
-tcpHandles address = (addressScheme address) == tcpScheme
+-- TODO should be IO
+tcpHandles :: TCPTransport -> Name -> IO Bool
+tcpHandles transport name = do 
+  resolved <- resolve (tcpResolver transport) name
+  return $ isJust resolved
+  where
+    isJust (Just _) = True
+    isJust _ = False
 
-tcpBind :: TCPTransport -> Mailbox -> Address -> IO (Either String Binding)
-tcpBind transport inc address = do  
+tcpBind :: TCPTransport -> Mailbox -> Name -> IO (Either String Binding)
+tcpBind transport inc name = do  
   atomically $ modifyTVar (tcpBindings transport) $ \bindings ->
-    M.insert address inc bindings
+    M.insert name inc bindings
+  Just address <- resolve (tcpResolver transport) name
   let (_,port) = parseTCPAddress address
   listener <- async $ do 
     infoM _log $ "Binding to address " ++ (show address)
-    tcpListen port
+    tcpListen address port
   return $ Right Binding {
-    bindingAddress = address,
-    unbind = tcpUnbind listener
+    bindingName = name,
+    unbind = tcpUnbind listener address
     }
   where
-    tcpListen port = listen HostAny port $ \(socket,_) -> do 
-      tcpAccept socket
-    tcpAccept socket = do
+    tcpListen address port = listen HostAny port $ \(socket,_) -> do 
+      tcpAccept address socket
+    tcpAccept address socket = do
       (client,clientAddress) <- accept socket
-      _ <- async $ tcpDispatch client clientAddress
-      tcpAccept socket
-    tcpDispatch client socketAddress = do
+      _ <- async $ tcpDispatch address client clientAddress
+      tcpAccept address socket
+    tcpDispatch address client socketAddress = do
       infoM _log $ "Accepted connection on " ++ (show address)
       identity <- tcpIdentify client socketAddress
       case identity of
@@ -175,14 +182,15 @@ tcpBind transport inc address = do
           case msg of
             Left _ -> return Nothing
             Right message -> return $ Just message
-    tcpUnbind listener = do 
+    tcpUnbind listener address = do 
       infoM _log $ "Unbinding from port " ++ (show address)
       cancel listener
 
-tcpSendTo :: TCPTransport -> Address -> Message -> IO ()
-tcpSendTo transport address msg = do
+tcpSendTo :: TCPTransport -> Name -> Message -> IO ()
+tcpSendTo transport name msg = do
+  Just address <- resolve (tcpResolver transport) name
   let env = encode $ Envelope {
-        envelopeDestination = address,
+        envelopeDestination = name,
         envelopeContents = msg
         }
   amsngr <- atomically $ do 
@@ -252,7 +260,7 @@ sender socket address mailbox = sendMessages
                   throw e)
       sendMessages
 
-dispatcher :: TVar (M.Map Address Mailbox) -> Mailbox -> IO ()
+dispatcher :: TVar (M.Map Name Mailbox) -> Mailbox -> IO ()
 dispatcher bindings mbox = dispatchMessages
   where
     dispatchMessages = do
