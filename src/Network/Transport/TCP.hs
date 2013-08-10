@@ -35,8 +35,9 @@ import Control.Exception
 
 import qualified Data.ByteString as B
 import qualified Data.Map as M
-import qualified Data.Text as T
 import Data.Serialize
+import qualified Data.Set as S
+import qualified Data.Text as T
 
 import GHC.Generics
 
@@ -169,9 +170,7 @@ tcpBind transport inc name = do
           case found of
             Just _ -> closeMessenger msngr
             Nothing -> do
-              atomically $ do 
-                modifyTVar (tcpMessengers transport) $ (\msngrs -> M.insert clientAddress msngr msngrs)
-              infoM _log $ "Added incoming messenger for " ++ (show clientAddress)
+              addMessenger transport clientAddress msngr
     tcpIdentify client clientAddress = do
       infoM _log $ "Awaiting identity from " ++ (show clientAddress)
       maybeMsg <- receiveMessage client
@@ -203,14 +202,23 @@ tcpSendTo transport name msg = do
       (socket,_) <- connectSock host port
       infoM _log $ "Connected to " ++ (show address)
       msngr <- newMessenger socket address (tcpInbound transport)
-      atomically $ 
-        modifyTVar (tcpMessengers transport) $ \msngrs -> M.insert address msngr msngrs
-      deliver msngr $ encode $ IdentifyMessage address
+      addMessenger transport address msngr
+      -- identify all bindings
+      identifyAll msngr
       deliver msngr env
       return ()
     Just msngr -> deliver msngr env
     where
       deliver msngr message = atomically $ writeTQueue (messengerOut msngr) message
+      identifyAll msngr = do
+        bindings <- atomically $ readTVar $ tcpBindings transport
+        boundAddresses <- mapM (resolve $ tcpResolver transport) (M.keys bindings)
+        let uniqueAddresses = S.toList $ S.fromList boundAddresses
+        mapM_ (identify msngr) uniqueAddresses
+      identify msngr maybeUniqueAddress= do
+        case maybeUniqueAddress of
+          Nothing -> return()
+          Just uniqueAddress -> deliver msngr $ encode $ IdentifyMessage uniqueAddress
 
 tcpShutdown :: TCPTransport -> IO ()
 tcpShutdown transport = do
@@ -232,6 +240,9 @@ data Messenger = Messenger {
   messengerSocket :: Socket
   }
                  
+instance Show Messenger where
+  show msngr = "Messenger(" ++ (show $ messengerAddress msngr) ++ "," ++ (show $ messengerSocket msngr) ++ ")"
+                 
 newMessenger :: Socket -> Address -> Mailbox -> IO Messenger                 
 newMessenger socket address inc = do
   out <- newMailbox
@@ -245,6 +256,14 @@ newMessenger socket address inc = do
     messengerSocket = socket
     }
                  
+addMessenger :: TCPTransport -> Address -> Messenger -> IO ()
+addMessenger transport address msngr = do
+  msngrs <- atomically $ do
+        modifyTVar (tcpMessengers transport) $ \msngrs -> M.insert address msngr msngrs
+        msngrs <- readTVar (tcpMessengers transport)
+        return msngrs
+  infoM _log $ "Added messenger to " ++ (show address) ++ "; messengers are " ++ (show msngrs)
+
 closeMessenger :: Messenger -> IO ()                 
 closeMessenger msngr = do
   cancel $ messengerSender msngr
