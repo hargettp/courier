@@ -57,7 +57,7 @@ data TCPTransport = TCPTransport {
   tcpMessengers :: TVar (M.Map Address Messenger),  
   tcpBindings :: TVar (M.Map Name Mailbox),
   tcpInbound :: Mailbox,
-  tcpDispatcher :: Async (),
+  tcpDispatchers :: S.Set (Async ()),
   tcpResolver :: Resolver
   }
                     
@@ -92,7 +92,7 @@ newTCPTransport resolver = do
         tcpMessengers = messengers,
         tcpBindings = bindings,
         tcpInbound = inbound,
-        tcpDispatcher = dispatch,
+        tcpDispatchers = S.fromList [dispatch],
         tcpResolver = resolver
         }
   return Transport {
@@ -229,8 +229,7 @@ tcpShutdown transport = do
   listeners <- atomically $ readTVar $ tcpListeners transport
   mapM_ sClose $ M.elems listeners
   infoM _log $ "Closing dispatcher"
-  cancel $ tcpDispatcher transport
-  return ()
+  mapM_ cancel $ S.toList $ tcpDispatchers transport
 
 data Messenger = Messenger {
   messengerOut :: Mailbox,
