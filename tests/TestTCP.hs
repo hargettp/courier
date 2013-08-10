@@ -40,8 +40,8 @@ testEndpointTransport :: Assertion
 testEndpointTransport = do  
   let name1 = "endpoint1"
       name2 = "endpoint2"
-  let resolver = resolverFromList [(name1,newTCPAddress "localhost:2000"),
-                               (name2,newTCPAddress "localhost:2001")]
+  let resolver = resolverFromList [(name1,"localhost:2000"),
+                               (name2,"localhost:2001")]
   transport <- newTCPTransport resolver
   _ <- newEndpoint [transport]
   return ()
@@ -50,8 +50,8 @@ testEndpointBindUnbind :: Assertion
 testEndpointBindUnbind = do  
   let name1 = "endpoint1"
       name2 = "endpoint2"
-  let resolver = resolverFromList [(name1,newTCPAddress "localhost:2000"),
-                               (name2,newTCPAddress "localhost:2001")]
+  let resolver = resolverFromList [(name1,"localhost:2000"),
+                               (name2,"localhost:2001")]
   transport <- newTCPTransport resolver
   endpoint <- newEndpoint [transport]
   Right () <- bindEndpoint endpoint name1
@@ -65,8 +65,8 @@ testEndpointSendReceive :: Assertion
 testEndpointSendReceive = do
   let name1 = "endpoint1"
       name2 = "endpoint2"
-  let resolver = resolverFromList [(name1,newTCPAddress "localhost:2000"),
-                               (name2,newTCPAddress "localhost:2001")]
+  let resolver = resolverFromList [(name1,"localhost:2000"),
+                               (name2,"localhost:2001")]
   bracket (newTCPTransport resolver)
     (\transport1 -> shutdown transport1)
     (\transport1 -> 
@@ -93,8 +93,8 @@ testEndpointSendReceiveReply :: Assertion
 testEndpointSendReceiveReply = do
   let name1 = "endpoint1"
       name2 = "endpoint2"
-  let resolver = resolverFromList [(name1,newTCPAddress "localhost:2002"),
-                                   (name2,newTCPAddress "localhost:2003")]
+  let resolver = resolverFromList [(name1,"localhost:2002"),
+                                   (name2,"localhost:2003")]
   bracket (newTCPTransport resolver)
     shutdown
     (\transport1 -> 

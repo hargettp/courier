@@ -17,7 +17,7 @@
 -----------------------------------------------------------------------------
 
 module Network.Transport (
-  Address(..),
+  Address,
   Binding(..),
   Envelope(..),
   Mailbox,
@@ -81,16 +81,11 @@ newMailbox :: IO Mailbox
 newMailbox = atomically $ newTQueue
 
 {-|
-An address is a logical identifier suitable for establishing a 'Connection' to
-another 'Endpoint' over a 'Transport'. The 'addressScheme' determines which 'Transport'
-will handle attempts to 'connect' or 'bind' to an 'Address'.
+An address is a logical identifier suitable for establishing a connection to
+another 'Endpoint' over a 'Transport'. It's use (if at all) is specific to the 'Transport'
+in question.
 -}
-data Address = Address {
-  addressScheme :: String,
-  addressLocation :: String
-  } deriving (Eq,Show,Ord,Generic)
-
-instance Serialize Address
+type Address = String
 
 {-|
 A scheme is an identifier for a discrete type of transport.

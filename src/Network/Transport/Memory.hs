@@ -19,8 +19,7 @@
 -----------------------------------------------------------------------------
 
 module Network.Transport.Memory (
-  newMemoryTransport,
-  newMemoryAddress
+  newMemoryTransport
   ) where
 
 -- local imports
@@ -38,15 +37,6 @@ import Data.Maybe (fromJust)
 
 memoryScheme :: Scheme
 memoryScheme = "mem"
-
-{-|
-Create an 'Address' suitable for use with memory 'Transport's
--}
-newMemoryAddress :: String -> Address
-newMemoryAddress address = Address {
-  addressScheme = memoryScheme,
-  addressLocation = address
-  }
 
 data MemoryTransport = MemoryTransport {
   boundMailboxes :: TVar (M.Map Name Mailbox)

@@ -19,8 +19,7 @@
 -----------------------------------------------------------------------------
 
 module Network.Transport.TCP (
-  newTCPTransport,
-  newTCPAddress
+  newTCPTransport
   ) where
 
 -- local imports
@@ -66,15 +65,6 @@ data IdentifyMessage = IdentifyMessage Address deriving (Generic)
 instance Serialize IdentifyMessage
 
 {-|
-Create an 'Address' suitable for use with TCP 'Transport's
--}
-newTCPAddress :: String -> Address
-newTCPAddress address = Address {
-  addressScheme = tcpScheme,
-  addressLocation = address
-  }
-                        
-{-|
 Create a new 'Transport' suitable for sending messages over TCP/IP.  There can
 be multiple instances of these 'Transport's: 'Network.Endpoints.Endpoint' using
 different instances will still be able to communicate, provided they use
@@ -114,7 +104,7 @@ is assumed to be @localhost@.
 -}
 parseTCPAddress :: Address -> (HostName,ServiceName)
 parseTCPAddress address = 
-  let identifer = T.pack $ addressLocation address 
+  let identifer = T.pack $ address 
       parts = T.splitOn ":" identifer
   in if (length parts) > 1 then
        (host $ T.unpack $ parts !! 0, port $ T.unpack $ parts !! 1)
