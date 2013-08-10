@@ -80,8 +80,8 @@ newEndpoint trans = do
     }
 
 {-|
-Binding an 'Endpoint' to an 'Address' prepares the 'Endpoint' to receive
-messages sent to the bound address.  Upon success, the result will be @Right ()@, but
+Binding an 'Endpoint' to a 'Name' prepares the 'Endpoint' to receive
+messages sent to the bound name.  Upon success, the result will be @Right ()@, but
 if failed, @Left text-of-error-message@.
 -}
 bindEndpoint :: Endpoint -> Name -> IO (Either String ())
@@ -99,9 +99,9 @@ bindEndpoint endpoint name = do
           return $ Right ()
 
 {-|
-Unbind an 'Endpoint' form an 'Address', after which the 'Endpoint' will eventually not 
-receive messages sent to that 'Address'. Note that there is no guarantee that after 'Unbind'
-succeeds that additional messages to that 'Address' will not be delivered: the only guarantee
+Unbind an 'Endpoint' from a 'Name', after which the 'Endpoint' will eventually not 
+receive messages sent to that 'Name'. Note that there is no guarantee that after 'Unbind'
+succeeds that additional messages to that 'Name' will not be delivered: the only guarantee
 is that eventually messages will no longer be delivered.
 Upon success, the result will be @Right ()@ but
 if failed, @Left text-of-error-message@.
@@ -117,7 +117,7 @@ unbindEndpoint endpoint name = do
       return $ Right ()
 
 {-|
-Send a 'Message' to specific 'Address' via the indicated 'Endpoint'. While a successful
+Send a 'Message' to specific 'Name' via the indicated 'Endpoint'. While a successful
 response (indicated by returning @Right ()@) indicates that there was no error initiating
 transport of the message, success does not guarantee that an 'Endpoint' received the message.
 Failure initiating transport is indicated by returning @Left text-of-error-message@.
