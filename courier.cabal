@@ -4,16 +4,24 @@
 name:                courier
 version:             0.1.0.0
 synopsis:            A message-passing library, intended for simplifying network applications
--- description:         
+description:         Inspired Erlang's simple message-passing facilities, courier provides roughly similar 
+                     capabilities. Applications simply create one or more endpoints, bind each to a transport 
+                     using a given name, then can freely send / receive messages to other endpoints just by 
+                     referencing the name each endpoint bound to its transport.
 homepage:          http://github.com/hargettp/courier
 license:             MIT
 license-file:        LICENSE
 author:              Phil Hargett
 maintainer:          phil@haphazardhouse.net
--- copyright:           
+copyright:           Copyright (c) 2013 Phil Hargett
+
 category:            Network
 build-type:          Simple
 cabal-version:       >=1.8
+
+source-repository head
+  type:     git
+  location: https://github.com/hargettp/courier.git
 
 library
   hs-source-dirs: src
