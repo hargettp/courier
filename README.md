@@ -3,7 +3,7 @@ courier
 
 A basic message-passing library, intended for simplifying network applications.
 
-Inspired Erlang's simple message-passing facilities, courier provides roughly similar capabilities.  Applications simply 
+Inspired by Erlang's simple message-passing facilities, courier provides roughly similar capabilities.  Applications simply 
 create one or more endpoints, bind each to a transport using a given name, then can freely send / receive messages to
 other endpoints just by referencing the name each endpoint bound to its transport.
 
