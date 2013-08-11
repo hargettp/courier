@@ -32,9 +32,9 @@ library
                   Network.Transport.Memory
                   Network.Transport.TCP
 
-  ghc-options: -Wall -threaded
+  ghc-options: -Wall
   -- other-modules:       
-  build-depends:       base,
+  build-depends:       base >=4 && <5,
                        async,
                        bytestring,
                        cereal,
