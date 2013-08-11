@@ -2,12 +2,14 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                courier
-version:             0.1.0.2
+version:             0.1.0.3
 synopsis:            A message-passing library, intended for simplifying network applications
-description:         Inspired Erlang's simple message-passing facilities, courier provides roughly similar 
-                     capabilities. Applications simply create one or more endpoints, bind each to a transport 
-                     using a given name, then can freely send / receive messages to other endpoints just by 
-                     referencing the name each endpoint bound to its transport.
+description:         Inspired by Erlang's simple message-passing facilities, courier provides roughly similar 
+                     capabilities. Applications simply create one or more 'Network.Endpoints.Endpoint's, 
+                     bind each to a 'Network.Transport.Transport' using a given name, then can freely 
+                     send / receive messages to other endpoints just by referencing the name each endpoint 
+                     bound to its transport.
+
 homepage:          http://github.com/hargettp/courier
 license:             MIT
 license-file:        LICENSE
