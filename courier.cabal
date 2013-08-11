@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                courier
-version:             0.1.0.0
+version:             0.1.0.1
 synopsis:            A message-passing library, intended for simplifying network applications
 description:         Inspired Erlang's simple message-passing facilities, courier provides roughly similar 
                      capabilities. Applications simply create one or more endpoints, bind each to a transport 
