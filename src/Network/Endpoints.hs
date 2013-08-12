@@ -21,7 +21,10 @@
 
 module Network.Endpoints (
   
- --  * Primary API
+  -- * How to use courier in an application
+  -- $use
+  
+  -- * Primary API
   Endpoint,
   newEndpoint,
   
@@ -29,7 +32,9 @@ module Network.Endpoints (
   unbindEndpoint,
   
   sendMessage,
+  broadcastMessage,
   receiveMessage,
+  receiveMessageTimeout,
   
   -- * Transports
   {-|
@@ -49,12 +54,38 @@ import Network.Transport
 
 -- external imports
 
+import Control.Concurrent
+import Control.Concurrent.Async
 import Control.Concurrent.STM
 
 import qualified Data.Map as M
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
+
+-- $use
+-- 
+-- A sample of how to use this library:
+-- 
+-- > -- Just import this package to access the primary APIs
+-- > import Network.Endpoints
+-- >
+-- > -- A specific transport is necessary, however
+-- > import Network.Transport.TCP
+-- > 
+-- > helloWorld :: IO ()
+-- > helloWorld = do
+-- >   let name1 = "endpoint1"b
+-- >       name2 = "endpoint2"
+-- >       resolver = resolverFromList [(name1,"localhost:2000"),
+-- >                                    (name2,"localhost:2001")]
+-- >   endpoint1 <- newEndpoint [transport]
+-- >   endpoint2 <- newEndpoint [transport]
+-- >   Right () <- bindEndpoint endpoint1 name1
+-- >   Right () <- bindEndpoint endpoint2 name2
+-- >   sendMessage endpoint1 name2 $ encode "hello world!"
+-- >   msg <- receiveMessage endpoint2
+-- >   print msg
 
 {-|
 Endpoints are a locus of communication, used for sending and receive messages.
@@ -132,10 +163,29 @@ sendMessage endpoint name msg  = do
       return $ Right ()
 
 {-|
-Receive the next 'Message' sent to the 'Endpoint'.
+Helper for sending a single 'Message' to several 'Endpoint's.
+-}
+broadcastMessage :: Endpoint -> [Name] -> Message -> IO [(Either String ())]
+broadcastMessage endpoint names msg = do
+  mapM (\name -> sendMessage endpoint name msg) names
+
+{-|
+Receive the next 'Message' sent to the 'Endpoint', blocking until a message is available.
 -}
 receiveMessage :: Endpoint -> IO Message
 receiveMessage endpoint = atomically $ readTQueue $ endpointMailbox endpoint
+
+{-|
+Wait for a message to be received within the timeout, blocking until either a message
+is available or the timeout has occurred.  If a message was available, returns @Just message@,
+but returns @Nothing@ if no message available before the timeout occurred.
+-}
+receiveMessageTimeout :: Endpoint -> Int -> IO (Maybe Message)
+receiveMessageTimeout endpoint delay = do
+  resultOrTimeout <- race (receiveMessage endpoint) (threadDelay delay)
+  case resultOrTimeout of
+    Left result -> return $ Just result
+    Right () -> return Nothing
 
 findTransport :: Endpoint -> Name -> IO (Maybe Transport)
 findTransport endpoint name = do
