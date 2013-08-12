@@ -38,7 +38,7 @@ A sample of use follows:
  
  helloWorld :: IO ()
  helloWorld = do
-   let name1 = "endpoint1"b
+   let name1 = "endpoint1"
        name2 = "endpoint2"
        resolver = resolverFromList [(name1,"localhost:2000"),
                                     (name2,"localhost:2001")]
