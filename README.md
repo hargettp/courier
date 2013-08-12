@@ -53,3 +53,17 @@ A sample of use follows:
    shutdown transport
    
 ```
+
+To install, simply run the following in a shell:
+
+```
+cabal install courier
+```
+
+Or if using cabal-dev, run in a directory prepared with a cabal-dev sandbox:
+
+```
+cabal-dev install courier
+```
+
+Successfully installed on both Linux 12.04 AMD64 and Mac OS X Mount Lion, using GHC 7.6.3.
