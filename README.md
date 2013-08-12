@@ -10,8 +10,22 @@ other endpoints just by referencing the name each endpoint bound to its transpor
 A primary driver of courier's design is the ability of application writers to swap out the transport used for
 delivering messages between endpoints without altering the logic of their application.  Many algorithms (such as for
 distributed consensus) require a simplified message-passing facility in their implementation, and keeping the
-transport implementation separate from the specific messages passing protocol can simplify development and testing of
+transport implementation separate from the specific message passing protocol can simplify development and testing of
 such algorithms.
+
+The semantics of courier's use are simple:
+
+ * An application sends and receives messages through an endpoint
+ * Messages are just arbitrary bytestrings; application are free to construct / interpret them as needed
+ * Endpoints are created with one or more transports
+ * Sending messages is non-blocking and provides no feedback or guarantee regarding delivery; specific transports may, 
+   however, provide out of band feedback regarding delivery
+ * Receiving messages is by default blocking, although a blocking call with a timeout is available
+  
+Note that while the simplicity is inspired by Erlang, the actual semantics of a receive operation are not: receive just returns 
+the next message delivered to an endpoint by a transport.  There is no attempt to perform pattern-matching on a range
+of alternatives, and thus enabling out-of-order receipt.  Consequently, all messages delivered to an endpoint will always
+be received in the order delivered. In this sense, endpoints are more akin to channels in Go but without the strict typing.
 
 A sample of use follows:
 
