@@ -91,7 +91,7 @@ testEndpointSendReceive = do
               threadDelay testDelay
 
               infoM _log "Sending message from 1 to 2"
-              _ <- sendMessage endpoint1 name2 $ encode "hello!"
+              sendMessage_ endpoint1 name2 $ encode "hello!"
               Just msg <- receiveMessageTimeout endpoint2 testDelay
               assertEqual "Received message not same as sent" (Right "hello!") (decode msg)
               Right () <- unbindEndpoint endpoint1 name1
@@ -118,12 +118,12 @@ testEndpointSendReceiveReply = do
               threadDelay testDelay
               
               infoM _log "Sending message from 1 to 2"
-              _ <- sendMessage endpoint1 name2 $ encode "hello!"
+              sendMessage_ endpoint1 name2 $ encode "hello!"
               Just msg1 <- receiveMessageTimeout endpoint2 testDelay
               assertEqual "Received message not same as sent" (Right "hello!") (decode msg1)
                 
               infoM _log "Sending message from 2 to 1"
-              _ <- sendMessage endpoint2 name1 $ encode "hi!"
+              sendMessage_ endpoint2 name1 $ encode "hi!"
               Just msg2 <- receiveMessageTimeout endpoint1 testDelay
               assertEqual "Received message not same as sent" (Right "hi!") (decode msg2)
               Right () <- unbindEndpoint endpoint1 name1

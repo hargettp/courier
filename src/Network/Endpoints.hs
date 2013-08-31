@@ -172,7 +172,7 @@ A variant of 'sendMessage' for use when the return value can be ignored.
 -}
 sendMessage_ :: Endpoint -> Name -> Message -> IO ()
 sendMessage_ endpoint name msg = do
-  _ <- sendMessage_ endpoint name msg
+  _ <- sendMessage endpoint name msg
   return ()
 
 {-|
