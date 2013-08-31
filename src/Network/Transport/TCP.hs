@@ -140,9 +140,15 @@ tcpBind transport inc name = do
     unbind = tcpUnbind listener address
     }
   where
-    tcpListen address port = listen HostAny port $ \(socket,_) -> do 
-      tcpAccept address socket
+    tcpListen address port = 
+        listen HostAny port $ \(socket,_) -> 
+            catch (do 
+                    tcpAccept address socket)
+                   (\e -> do 
+                           warningM _log $ "Listen error: " ++ (show (e :: SomeException))
+                           throw e)
     tcpAccept address socket = do
+      infoM _log $ "Listening for connections on " ++ (show address) ++ ": " ++ (show socket)
       (client,clientAddress) <- accept socket
       _ <- async $ tcpDispatch address client clientAddress
       tcpAccept address socket
@@ -188,12 +194,11 @@ tcpSendTo transport name msg = do
   case amsngr of
     Nothing -> do
       let (host,port) = parseTCPAddress address
-      infoM _log $ "Connecting to " ++ (show address)
-      (socket,_) <- connectSock host port
-      infoM _log $ "Connected to " ++ (show address)
+      infoM _log $ "Connecting to " ++ (show host) ++ ":" ++ (show port) -- (show address)
+      (socket,sockAddr) <- connectSock host port
+      infoM _log $ "Connected to " ++ (show address) ++ ": " ++ (show sockAddr)
       msngr <- newMessenger socket address (tcpInbound transport)
       addMessenger transport address msngr
-      -- identify all bindings
       identifyAll msngr
       deliver msngr env
       return ()
@@ -272,18 +277,21 @@ sender socket address mailbox = sendMessages
                 send socket msg
                 infoM _log $ "Message sent to" ++ (show address)
             ) (\e -> do 
-                  errorM _log $ "Send error " ++ (show (e :: SomeException))
+                  warningM _log $ "Send error: " ++ (show (e :: SomeException))
                   throw e)
       sendMessages
 
 dispatcher :: TVar (M.Map Name Mailbox) -> Mailbox -> IO ()
 dispatcher bindings mbox = dispatchMessages
   where
-    dispatchMessages = do
-      infoM _log $ "Dispatching messages"
-      env <- atomically $ readTQueue mbox
-      dispatchMessage env
-      dispatchMessages
+    dispatchMessages = catch (do
+                               infoM _log $ "Dispatching messages"
+                               env <- atomically $ readTQueue mbox
+                               dispatchMessage env
+                               dispatchMessages) 
+                              (\e -> do 
+                                  warningM _log $ "Dispatch error: " ++ (show (e :: SomeException))
+                                  throw e)
     dispatchMessage env = do
       infoM _log $ "Dispatching message"
       let envelopeOrErr = decode env
@@ -304,16 +312,19 @@ dispatcher bindings mbox = dispatchMessages
 receiver :: Socket -> Address -> Mailbox -> IO ()
 receiver socket address mailbox  = receiveMessages
   where
-    receiveMessages = do
+    receiveMessages = catch (do
       infoM _log $ "Waiting to receive from " ++ (show address)
       maybeMsg <- receiveMessage socket
       infoM _log $ "Received message from " ++ (show address)
       case maybeMsg of
         Nothing -> return ()
         Just msg -> atomically $ writeTQueue mailbox msg
+      receiveMessages) (\e -> do 
+                                  warningM _log $ "Receive error: " ++ (show (e :: SomeException))
+                                  throw e)
         
 receiveMessage :: Socket -> IO (Maybe Message)    
-receiveMessage socket = do
+receiveMessage socket = catch (do
   maybeLen <- recv socket 8 -- TODO must figure out what defines length of an integer in bytes 
   case maybeLen of
     Nothing -> do
@@ -322,7 +333,9 @@ receiveMessage socket = do
     Just len -> do 
       maybeMsg <- recv socket $ msgLength (decode len)
       infoM _log $ "Received message"
-      return maybeMsg
+      return maybeMsg) (\e -> do 
+                  warningM _log $ "Receive error: " ++ (show (e :: SomeException))
+                  throw e)
   where
     msgLength (Right size) = size
     msgLength (Left err) = error err

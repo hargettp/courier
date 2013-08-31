@@ -32,7 +32,9 @@ module Network.Endpoints (
   unbindEndpoint,
   
   sendMessage,
+  sendMessage_,
   broadcastMessage,
+  broadcastMessage_,                 
   receiveMessage,
   receiveMessageTimeout,
   
@@ -165,11 +167,29 @@ sendMessage endpoint name msg  = do
       return $ Right ()
 
 {-|
+A variant of 'sendMessage' for use when the return value can be ignored.
+
+-}
+sendMessage_ :: Endpoint -> Name -> Message -> IO ()
+sendMessage_ endpoint name msg = do
+  _ <- sendMessage_ endpoint name msg
+  return ()
+
+{-|
 Helper for sending a single 'Message' to several 'Endpoint's.
 -}
 broadcastMessage :: Endpoint -> [Name] -> Message -> IO [(Either String ())]
 broadcastMessage endpoint names msg = do
   mapM (\name -> sendMessage endpoint name msg) names
+
+{-|
+Variant of 'broadcastMessage' that ignores the results of sending.
+
+-}
+broadcastMessage_ :: Endpoint -> [Name] -> Message -> IO ()
+broadcastMessage_ endpoint names msg = do
+  _ <- broadcastMessage endpoint names msg
+  return ()
 
 {-|
 Receive the next 'Message' sent to the 'Endpoint', blocking until a message is available.

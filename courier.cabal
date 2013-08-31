@@ -68,6 +68,7 @@ Test-Suite test-courier
         cereal,
         directory,
         hslogger,
+        network-simple,
         -- this project's modules
         courier
 
