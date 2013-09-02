@@ -145,8 +145,7 @@ tcpBind transport inc name = do
             catch (do 
                     tcpAccept address socket)
                    (\e -> do 
-                           warningM _log $ "Listen error: " ++ (show (e :: SomeException))
-                           throw e)
+                           warningM _log $ "Listen error: " ++ (show (e :: SomeException)))
     tcpAccept address socket = do
       infoM _log $ "Listening for connections on " ++ (show address) ++ ": " ++ (show socket)
       (client,clientAddress) <- accept socket
@@ -159,7 +158,8 @@ tcpBind transport inc name = do
         Nothing -> sClose client
         Just (IdentifyMessage clientAddress) -> do
           infoM _log $ "Identified " ++ (show clientAddress)
-          msngr <- newMessenger client clientAddress (tcpInbound transport)
+          clientSocket <- atomically $ newTMVar client
+          msngr <- newMessenger clientSocket clientAddress (tcpInbound transport)
           found <- atomically $ do 
             msngrs <- readTVar $ tcpMessengers transport
             return $ M.lookup clientAddress msngrs
@@ -193,11 +193,8 @@ tcpSendTo transport name msg = do
     return $ M.lookup address msngrs
   case amsngr of
     Nothing -> do
-      let (host,port) = parseTCPAddress address
-      infoM _log $ "Connecting to " ++ (show host) ++ ":" ++ (show port) -- (show address)
-      (socket,sockAddr) <- connectSock host port
-      infoM _log $ "Connected to " ++ (show address) ++ ": " ++ (show sockAddr)
-      msngr <- newMessenger socket address (tcpInbound transport)
+      socketVar <- atomically $ newEmptyTMVar
+      msngr <- newMessenger socketVar address (tcpInbound transport)
       addMessenger transport address msngr
       identifyAll msngr
       deliver msngr env
@@ -231,13 +228,13 @@ data Messenger = Messenger {
   messengerAddress :: Address,
   messengerSender :: Async (),
   messengerReceiver :: Async (),
-  messengerSocket :: Socket
+  messengerSocket :: TMVar Socket
   }
                  
 instance Show Messenger where
-  show msngr = "Messenger(" ++ (show $ messengerAddress msngr) ++ "," ++ (show $ messengerSocket msngr) ++ ")"
+  show msngr = "Messenger(" ++ (show $ messengerAddress msngr) ++ ")"
                  
-newMessenger :: Socket -> Address -> Mailbox -> IO Messenger                 
+newMessenger :: TMVar Socket -> Address -> Mailbox -> IO Messenger                 
 newMessenger socket address inc = do
   out <- newMailbox
   sndr <- async $ sender socket address out
@@ -262,36 +259,61 @@ closeMessenger :: Messenger -> IO ()
 closeMessenger msngr = do
   cancel $ messengerSender msngr
   cancel $ messengerReceiver msngr
-  sClose $ messengerSocket msngr
+  open <- atomically $ tryTakeTMVar $ messengerSocket msngr
+  case open of
+    Just socket -> sClose socket
+    Nothing -> return ()
+    
 
-sender :: Socket -> Address -> Mailbox -> IO ()
-sender socket address mailbox = sendMessages
+sender :: TMVar Socket -> Address -> Mailbox -> IO ()
+sender socketVar address mailbox = sendMessages
   where
-    sendMessages = do 
+    sendMessages = do
+      reconnect
       catch (do
                 infoM _log $ "Waiting to send to " ++ (show address)
                 msg <- atomically $ readTQueue mailbox
                 infoM _log $ "Sending message to " ++ (show address)
-                send socket $ encode (B.length msg)
-                infoM _log $ "Length sent"
-                send socket msg
-                infoM _log $ "Message sent to" ++ (show address)
-            ) (\e -> do 
+                connected <- atomically $ tryReadTMVar socketVar
+                case connected of
+                  Just socket -> do 
+                    send socket $ encode (B.length msg)
+                    infoM _log $ "Length sent"
+                    send socket msg
+                    infoM _log $ "Message sent to" ++ (show address)
+                  Nothing -> return ()
+            ) (\e -> do
                   warningM _log $ "Send error: " ++ (show (e :: SomeException))
-                  throw e)
+                  disconnect)
       sendMessages
+    reconnect = do
+      -- TODO need a timeout here, in case connecting always fails
+      connected <- atomically $ tryReadTMVar socketVar
+      case connected of
+        Just _ -> return ()
+        Nothing -> do
+          let (host,port) = parseTCPAddress address
+          infoM _log $ "Connecting to " ++ (show host) ++ ":" ++ (show port) -- (show address)
+          (socket,sockAddr) <- connectSock host port
+          infoM _log $ "Connected to " ++ (show address) ++ ": " ++ (show sockAddr)
+          atomically $ putTMVar socketVar socket
+    disconnect = do
+      connected <- atomically $ tryTakeTMVar socketVar
+      case connected of
+        Just socket -> sClose socket
+        Nothing -> return ()
+
 
 dispatcher :: TVar (M.Map Name Mailbox) -> Mailbox -> IO ()
 dispatcher bindings mbox = dispatchMessages
   where
     dispatchMessages = catch (do
-                               infoM _log $ "Dispatching messages"
-                               env <- atomically $ readTQueue mbox
-                               dispatchMessage env
-                               dispatchMessages) 
-                              (\e -> do 
-                                  warningM _log $ "Dispatch error: " ++ (show (e :: SomeException))
-                                  throw e)
+                                 infoM _log $ "Dispatching messages"
+                                 env <- atomically $ readTQueue mbox
+                                 dispatchMessage env
+                                 dispatchMessages) 
+                       (\e -> do 
+                           warningM _log $ "Dispatch error: " ++ (show (e :: SomeException)))
     dispatchMessage env = do
       infoM _log $ "Dispatching message"
       let envelopeOrErr = decode env
@@ -309,19 +331,19 @@ dispatcher bindings mbox = dispatchMessages
                 writeTQueue dest msg
                 return ()
 
-receiver :: Socket -> Address -> Mailbox -> IO ()
-receiver socket address mailbox  = receiveMessages
+receiver :: TMVar Socket -> Address -> Mailbox -> IO ()
+receiver socketVar address mailbox  = receiveMessages
   where
     receiveMessages = catch (do
       infoM _log $ "Waiting to receive from " ++ (show address)
+      socket <- atomically $ readTMVar socketVar
       maybeMsg <- receiveMessage socket
       infoM _log $ "Received message from " ++ (show address)
       case maybeMsg of
         Nothing -> return ()
         Just msg -> atomically $ writeTQueue mailbox msg
       receiveMessages) (\e -> do 
-                                  warningM _log $ "Receive error: " ++ (show (e :: SomeException))
-                                  throw e)
+                           warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
         
 receiveMessage :: Socket -> IO (Maybe Message)    
 receiveMessage socket = catch (do

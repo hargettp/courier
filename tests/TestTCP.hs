@@ -40,6 +40,7 @@ tests =
     testCase "tcp-endpoints+transport" testEndpointTransport,
     testCase "tcp-bind-unbind" testEndpointBindUnbind,
     testCase "tcp-send-receive" testEndpointSendReceive,
+    testCase "tcp-double-send-receive" testEndpointDoubleSendReceive,
     testCase "tcp-send-receive-reply" testEndpointSendReceiveReply
   ] 
   
@@ -98,6 +99,45 @@ testEndpointSendReceive = do
               Right () <- unbindEndpoint endpoint2 name2
               return ()))
   
+testEndpointDoubleSendReceive :: Assertion
+testEndpointDoubleSendReceive = do
+  let name1 = "endpoint1"
+      name2 = "endpoint2"
+      name3 = "endpoint3"
+  let resolver = resolverFromList [(name1,address1),
+                               (name2,address2),
+                               (name3,address1)]
+  bracket (newTCPTransport resolver)
+    shutdown
+    (\transport1 -> do 
+        bracket (newTCPTransport resolver)
+          shutdown
+          (\transport2 -> do  
+              endpoint1 <- newEndpoint [transport1]
+              endpoint2 <- newEndpoint [transport2]
+              endpoint3 <- newEndpoint [transport1]
+              Right () <- bindEndpoint endpoint1 name1
+              Right () <- bindEndpoint endpoint2 name2
+              Right () <- bindEndpoint endpoint3 name3
+              threadDelay testDelay
+
+              infoM _log "Sending message from 1 to 2"
+              sendMessage_ endpoint1 name2 $ encode "hello!"
+              Just msg1 <- receiveMessageTimeout endpoint2 testDelay
+              assertEqual "Received message not same as sent" (Right "hello!") (decode msg1)
+              infoM _log "Sending message from 3 to 2"
+              sendMessage_ endpoint3 name2 $ encode "ciao!"
+              Just msg3 <- receiveMessageTimeout endpoint2 testDelay
+              assertEqual "Received message not same as sent" (Right "ciao!") (decode msg3)
+              Right () <- unbindEndpoint endpoint1 name1
+              
+              infoM _log "Sending message from 3 to 2"
+              sendMessage_ endpoint3 name2 $ encode "hi!"
+              Just msg3a <- receiveMessageTimeout endpoint2 testDelay
+              assertEqual "Received message not same as sent" (Right "hi!") (decode msg3a)
+              Right () <- unbindEndpoint endpoint2 name2
+              Right () <- unbindEndpoint endpoint3 name3
+              return ()))
 
 testEndpointSendReceiveReply :: Assertion
 testEndpointSendReceiveReply = do
@@ -131,3 +171,4 @@ testEndpointSendReceiveReply = do
                 
               return ()))
   
+
