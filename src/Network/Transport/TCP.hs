@@ -222,6 +222,7 @@ tcpShutdown transport = do
   mapM_ sClose $ M.elems listeners
   infoM _log $ "Closing dispatcher"
   mapM_ cancel $ S.toList $ tcpDispatchers transport
+  mapM_ wait $ S.toList $ tcpDispatchers transport
 
 data Messenger = Messenger {
   messengerOut :: Mailbox,
