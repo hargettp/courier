@@ -191,8 +191,9 @@ testEndpointMultipleSendReceiveReply = do
               threadDelay testDelay
 
               roundtrip endpoint1 endpoint2 name1 name2
+              roundtrip endpoint2 endpoint1 name2 name1
               roundtrip endpoint1 endpoint2 name1 name2
-              roundtrip endpoint1 endpoint2 name1 name2
+              roundtrip endpoint2 endpoint1 name2 name1
               
               Right () <- unbindEndpoint endpoint1 name1
               Right () <- unbindEndpoint endpoint2 name2

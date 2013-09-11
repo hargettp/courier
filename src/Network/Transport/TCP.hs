@@ -40,7 +40,7 @@ import qualified Data.Text as T
 
 import GHC.Generics
 
-import Network.Socket (HostName,ServiceName,Socket,sClose,accept)
+import Network.Socket (sClose,accept)
 import Network.Simple.TCP hiding (accept)
 
 import System.Log.Logger
@@ -164,7 +164,9 @@ tcpBind transport inc name = do
             msngrs <- readTVar $ tcpMessengers transport
             return $ M.lookup clientAddress msngrs
           case found of
-            Just _ -> closeMessenger msngr
+            Just _ -> do
+              infoM _log $ "Already have messenger for " ++ (show clientAddress)
+              closeMessenger msngr
             Nothing -> do
               addMessenger transport clientAddress msngr
     tcpIdentify client clientAddress = do
@@ -193,6 +195,8 @@ tcpSendTo transport name msg = do
     return $ M.lookup address msngrs
   case amsngr of
     Nothing -> do
+      msngrs <- atomically $ readTVar $ tcpMessengers transport
+      infoM _log $ "No messenger for " ++ (show address) ++ " in " ++ (show msngrs)
       socketVar <- atomically $ newEmptyTMVar
       msngr <- newMessenger socketVar address (tcpInbound transport)
       addMessenger transport address msngr
@@ -341,9 +345,12 @@ receiver socketVar address mailbox  = receiveMessages
       maybeMsg <- receiveMessage socket
       infoM _log $ "Received message from " ++ (show address)
       case maybeMsg of
-        Nothing -> return ()
-        Just msg -> atomically $ writeTQueue mailbox msg
-      receiveMessages) (\e -> do 
+        Nothing -> do
+          sClose socket
+          return ()
+        Just msg -> do
+          atomically $ writeTQueue mailbox msg
+          receiveMessages) (\e -> do 
                            warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
         
 receiveMessage :: Socket -> IO (Maybe Message)    
