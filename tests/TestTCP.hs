@@ -41,7 +41,8 @@ tests =
     testCase "tcp-bind-unbind" testEndpointBindUnbind,
     testCase "tcp-send-receive" testEndpointSendReceive,
     testCase "tcp-double-send-receive" testEndpointDoubleSendReceive,
-    testCase "tcp-send-receive-reply" testEndpointSendReceiveReply
+    testCase "tcp-send-receive-reply" testEndpointSendReceiveReply,
+    testCase "tcp-multiple-send-receive-reply" testEndpointMultipleSendReceiveReply
   ] 
   
 testEndpointTransport :: Assertion  
@@ -170,5 +171,45 @@ testEndpointSendReceiveReply = do
               Right () <- unbindEndpoint endpoint2 name2
                 
               return ()))
+  
+testEndpointMultipleSendReceiveReply :: Assertion
+testEndpointMultipleSendReceiveReply = do
+  let name1 = "endpoint1"
+      name2 = "endpoint2"
+  let resolver = resolverFromList [(name1,address1),
+                                   (name2,address2)]
+  bracket (newTCPTransport resolver)
+    shutdown
+    (\transport1 -> 
+        bracket (newTCPTransport resolver)
+          shutdown
+          (\transport2 -> do 
+              endpoint1 <- newEndpoint [transport1]
+              endpoint2 <- newEndpoint [transport2]
+              Right () <- bindEndpoint endpoint1 name1
+              Right () <- bindEndpoint endpoint2 name2
+              threadDelay testDelay
+
+              roundtrip endpoint1 endpoint2 name1 name2
+              roundtrip endpoint1 endpoint2 name1 name2
+              roundtrip endpoint1 endpoint2 name1 name2
+              
+              Right () <- unbindEndpoint endpoint1 name1
+              Right () <- unbindEndpoint endpoint2 name2
+                
+              return ()))
+    where
+      roundtrip endpoint1 endpoint2 name1 name2 = do
+        infoM _log "Sending message from 1 to 2"
+        sendMessage_ endpoint1 name2 $ encode "hello!"
+        Just msg1 <- receiveMessageTimeout endpoint2 testDelay
+        assertEqual "Received message not same as sent" (Right "hello!") (decode msg1)
+                
+        infoM _log "Sending message from 2 to 1"
+        sendMessage_ endpoint2 name1 $ encode "hi!"
+        Just msg2 <- receiveMessageTimeout endpoint1 testDelay
+        assertEqual "Received message not same as sent" (Right "hi!") (decode msg2)
+
+        
   
 
