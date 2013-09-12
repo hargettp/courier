@@ -17,7 +17,7 @@ author:              Phil Hargett
 maintainer:          phil@haphazardhouse.net
 copyright:           Copyright (c) 2013 Phil Hargett
 
-category:            Network
+category:            Network,Distributed Computing,Message-Oriented
 build-type:          Simple
 cabal-version:       >=1.8
 
