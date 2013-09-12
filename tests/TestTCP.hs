@@ -123,20 +123,13 @@ testEndpointDoubleSendReceive = do
               Right () <- bindEndpoint endpoint3 name3
               threadDelay testDelay
 
-              infoM _log "Sending message from 1 to 2"
-              sendMessage_ endpoint1 name2 $ encode "hello!"
-              Just msg1 <- receiveMessageTimeout endpoint2 testDelay
-              assertEqual "Received message not same as sent" (Right "hello!") (decode msg1)
-              infoM _log "Sending message from 3 to 2"
-              sendMessage_ endpoint3 name2 $ encode "ciao!"
-              Just msg3 <- receiveMessageTimeout endpoint2 testDelay
-              assertEqual "Received message not same as sent" (Right "ciao!") (decode msg3)
+              verifiedSend endpoint1 endpoint2 name1 name2 "hello"
+              verifiedSend endpoint3 endpoint2 name3 name2 "ciao!"
+              
               Right () <- unbindEndpoint endpoint1 name1
               
-              infoM _log "Sending message from 3 to 2"
-              sendMessage_ endpoint3 name2 $ encode "hi!"
-              Just msg3a <- receiveMessageTimeout endpoint2 testDelay
-              assertEqual "Received message not same as sent" (Right "hi!") (decode msg3a)
+              verifiedSend endpoint3 endpoint2 name3 name2 "hi!"
+              
               Right () <- unbindEndpoint endpoint2 name2
               Right () <- unbindEndpoint endpoint3 name3
               return ()))
@@ -159,15 +152,9 @@ testEndpointSendReceiveReply = do
               Right () <- bindEndpoint endpoint2 name2
               threadDelay testDelay
               
-              infoM _log "Sending message from 1 to 2"
-              sendMessage_ endpoint1 name2 $ encode "hello!"
-              Just msg1 <- receiveMessageTimeout endpoint2 testDelay
-              assertEqual "Received message not same as sent" (Right "hello!") (decode msg1)
-                
-              infoM _log "Sending message from 2 to 1"
-              sendMessage_ endpoint2 name1 $ encode "hi!"
-              Just msg2 <- receiveMessageTimeout endpoint1 testDelay
-              assertEqual "Received message not same as sent" (Right "hi!") (decode msg2)
+              verifiedSend endpoint1 endpoint2 name1 name2 "hello"
+              verifiedSend endpoint2 endpoint1 name2 name1 "hi!"
+              
               Right () <- unbindEndpoint endpoint1 name1
               Right () <- unbindEndpoint endpoint2 name2
                 
@@ -188,15 +175,9 @@ testEndpointLocalSendReceiveReply = do
         Right () <- bindEndpoint endpoint2 name2
         threadDelay testDelay
               
-        infoM _log "Sending message from 1 to 2"
-        sendMessage_ endpoint1 name2 $ encode "hello!"
-        Just msg1 <- receiveMessageTimeout endpoint2 testDelay
-        assertEqual "Received message not same as sent" (Right "hello!") (decode msg1)
-                
-        infoM _log "Sending message from 2 to 1"
-        sendMessage_ endpoint2 name1 $ encode "hi!"
-        Just msg2 <- receiveMessageTimeout endpoint1 testDelay
-        assertEqual "Received message not same as sent" (Right "hi!") (decode msg2)
+        verifiedSend endpoint1 endpoint2 name1 name2 "hello"
+        verifiedSend endpoint2 endpoint1 name2 name1 "hi!"
+        
         Right () <- unbindEndpoint endpoint1 name1
         Right () <- unbindEndpoint endpoint2 name2
                 
@@ -231,16 +212,12 @@ testEndpointMultipleSendReceiveReply = do
               return ()))
     where
       roundtrip endpoint1 endpoint2 name1 name2 = do
-        infoM _log "Sending message from 1 to 2"
-        sendMessage_ endpoint1 name2 $ encode "hello!"
-        Just msg1 <- receiveMessageTimeout endpoint2 testDelay
-        assertEqual "Received message not same as sent" (Right "hello!") (decode msg1)
-                
-        infoM _log "Sending message from 2 to 1"
-        sendMessage_ endpoint2 name1 $ encode "hi!"
-        Just msg2 <- receiveMessageTimeout endpoint1 testDelay
-        assertEqual "Received message not same as sent" (Right "hi!") (decode msg2)
+        verifiedSend endpoint1 endpoint2 name1 name2 "hello"                
+        verifiedSend endpoint2 endpoint1 name2 name1 "hi!"
 
-        
-  
-
+verifiedSend :: Endpoint -> Endpoint -> Name -> Name -> String -> Assertion
+verifiedSend endpoint1 endpoint2 name1 name2 msg = do
+  infoM _log $ "Sending message from " ++ name1 ++ " to " ++ name2
+  sendMessage_ endpoint1 name2 $ encode msg
+  Just msg1 <- receiveMessageTimeout endpoint2 testDelay
+  assertEqual "Received message not same as sent" (Right msg) (decode msg1)
