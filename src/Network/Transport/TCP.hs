@@ -185,36 +185,50 @@ tcpBind transport inc name = do
 
 tcpSendTo :: TCPTransport -> Name -> Message -> IO ()
 tcpSendTo transport name msg = do
-  Just address <- resolve (tcpResolver transport) name
-  let env = encode $ Envelope {
-        envelopeDestination = name,
-        envelopeContents = msg
-        }
-  amsngr <- atomically $ do 
-    msngrs <- readTVar $ tcpMessengers transport
-    return $ M.lookup address msngrs
-  case amsngr of
-    Nothing -> do
-      msngrs <- atomically $ readTVar $ tcpMessengers transport
-      infoM _log $ "No messenger for " ++ (show address) ++ " in " ++ (show msngrs)
-      socketVar <- atomically $ newEmptyTMVar
-      msngr <- newMessenger socketVar address (tcpInbound transport)
-      addMessenger transport address msngr
-      identifyAll msngr
-      deliver msngr env
-      return ()
-    Just msngr -> deliver msngr env
-    where
-      deliver msngr message = atomically $ writeTQueue (messengerOut msngr) message
-      identifyAll msngr = do
-        bindings <- atomically $ readTVar $ tcpBindings transport
-        boundAddresses <- mapM (resolve $ tcpResolver transport) (M.keys bindings)
-        let uniqueAddresses = S.toList $ S.fromList boundAddresses
-        mapM_ (identify msngr) uniqueAddresses
-      identify msngr maybeUniqueAddress= do
-        case maybeUniqueAddress of
-          Nothing -> return()
-          Just uniqueAddress -> deliver msngr $ encode $ IdentifyMessage uniqueAddress
+  isLocal <- local
+  if isLocal
+    then return ()
+    else remote
+  where
+    local = do
+      found <- atomically $ do
+        bindings <- readTVar $ tcpBindings transport
+        return $ M.lookup name bindings
+      case found of
+        Nothing -> return False
+        Just mbox -> do
+          atomically $ writeTQueue mbox msg
+          return True
+    remote = do 
+      Just address <- resolve (tcpResolver transport) name
+      let env = encode $ Envelope {
+            envelopeDestination = name,
+            envelopeContents = msg
+            }
+      amsngr <- atomically $ do
+        msngrs <- readTVar $ tcpMessengers transport
+        return $ M.lookup address msngrs
+      case amsngr of
+        Nothing -> do
+          msngrs <- atomically $ readTVar $ tcpMessengers transport
+          infoM _log $ "No messenger for " ++ (show address) ++ " in " ++ (show msngrs)
+          socketVar <- atomically $ newEmptyTMVar
+          msngr <- newMessenger socketVar address (tcpInbound transport)
+          addMessenger transport address msngr
+          identifyAll msngr
+          deliver msngr env
+          return ()
+        Just msngr -> deliver msngr env
+    deliver msngr message = atomically $ writeTQueue (messengerOut msngr) message
+    identifyAll msngr = do
+      bindings <- atomically $ readTVar $ tcpBindings transport
+      boundAddresses <- mapM (resolve $ tcpResolver transport) (M.keys bindings)
+      let uniqueAddresses = S.toList $ S.fromList boundAddresses
+      mapM_ (identify msngr) uniqueAddresses
+    identify msngr maybeUniqueAddress= do
+      case maybeUniqueAddress of
+        Nothing -> return()
+        Just uniqueAddress -> deliver msngr $ encode $ IdentifyMessage uniqueAddress
 
 tcpShutdown :: TCPTransport -> IO ()
 tcpShutdown transport = do
