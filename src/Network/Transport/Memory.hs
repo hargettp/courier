@@ -30,7 +30,6 @@ import Network.Transport
 
 import Control.Concurrent.STM
 import qualified Data.Map as M
-import Data.Maybe (fromJust)
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -75,8 +74,9 @@ memoryHandles _ _ = return True
 memorySendTo :: MemoryTransport -> Name -> Message -> IO ()
 memorySendTo transport name msg = do
   mailboxes <- atomically $ readTVar $ boundMailboxes transport
-  let mailbox = fromJust $ M.lookup name mailboxes
-  atomically $ writeTQueue mailbox msg
+  case M.lookup name mailboxes of
+    Just mailbox -> atomically $ writeTQueue mailbox msg
+    Nothing -> return () -- error $ "No mailbox for " ++ name
 
 memoryUnbind :: MemoryTransport -> Name -> IO ()
 memoryUnbind transport name = do

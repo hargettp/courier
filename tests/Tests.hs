@@ -13,7 +13,6 @@ import System.Log.Handler.Simple
 import Test.Framework
 import Test.HUnit
 import Test.Framework.Providers.HUnit
-import Test.Framework.Providers.QuickCheck2
 
 -- Test modules
 import qualified TestMemory as M
@@ -42,7 +41,6 @@ tests :: [Test.Framework.Test]
 tests = 
   [
     testCase "hunit" (assertBool "HUnit assertion of truth is false" True),
-    testProperty "quickcheck" True,
     testCase "endpoints" testEndpoint
   ] 
   ++ M.tests
