@@ -32,6 +32,7 @@ library
                   Network.Endpoints
                   Network.Transport
                   Network.Transport.Memory
+                  Network.Transport.Sockets
                   Network.Transport.TCP
 
   ghc-options: -Wall
