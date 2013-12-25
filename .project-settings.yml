@@ -2,9 +2,17 @@ module-template: ! 'module MODULE_NAME where
 
 '
 extensions: {}
-environment: default
+environment: ghc-7.8-unstable
 cabal-file: project.cabal
+hidden-packages: ''
 version: 1
+extra-packages: ! 'Hackage: hslogger 1.2.3
+
+  Hackage: exceptions 0.3.2
+
+  Hackage: network-simple 0.3.0
+
+'
 ghc-args: []
 excluded-modules:
 - Setup.hs
