@@ -32,10 +32,12 @@ import Network.Transport
 import Control.Concurrent.Async
 import Control.Concurrent.STM
 
+import qualified Data.ByteString as B
 import qualified Data.Map as M
 import qualified Data.Set as S
 
-import Network.Socket (recv,send,HostName,ServiceName,Socket)
+import Network.Socket (HostName,ServiceName,Socket,socket,Family(..),SocketType(..),defaultProtocol)
+import Network.Socket.ByteString(sendAll,recv)
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -52,12 +54,18 @@ data UDPTransport = UDPTransport {
   udpResolver :: Resolver
   }
 
--- newUDPConnection :: HostName -> ServiceName -> IO Connection
--- newUDPConnection host port = do
---   sock <- atomically $ newEmptyTMVar
---   return Connection {
---     connSocket = sock,
---     connConnect = connectSock host port,
---     connSend = send,
---     connReceive = recv
---     }
+newUDPConnection :: HostName -> ServiceName -> IO Connection
+newUDPConnection host port = do
+  sock <- atomically $ newEmptyTMVar
+  return Connection {
+    connSocket = sock,
+    connConnect = socket AF_INET6 Datagram defaultProtocol,
+    connSend = sendAll,
+    connReceive = udpReceive
+    }
+  where
+      udpReceive socket byteCount = do
+          bytes <- recv socket byteCount
+          if B.null bytes
+            then return Nothing 
+            else return $ Just bytes

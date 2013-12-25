@@ -65,7 +65,7 @@ type SocketSend = Socket -> B.ByteString -> IO ()
 
 data Connection = Connection {
   connSocket :: TMVar Socket,
-  connConnect :: IO (Socket,SockAddr),
+  connConnect :: IO Socket,
   connSend :: Socket -> B.ByteString -> IO (),
   connReceive :: Socket -> Int -> IO (Maybe B.ByteString)
   }

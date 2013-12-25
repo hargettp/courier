@@ -13,6 +13,7 @@ extra-packages: ! 'Hackage: hslogger 1.2.3
   Hackage: network-simple 0.3.0
 
 '
-ghc-args: []
+ghc-args:
+- -Wall
 excluded-modules:
 - Setup.hs

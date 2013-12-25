@@ -59,19 +59,14 @@ data TCPTransport = TCPTransport {
   tcpResolver :: Resolver
   }
                     
--- data Connection = Connection {
---   connSocket :: TMVar Socket,
---   connConnect :: IO (Socket,SocketAddr),
---   connSend :: Socket -> B.ByteString -> IO (),
---   connReceive :: Socket -> IO (Maybe B.ByteString)
---   }
-
 newTCPConnection :: HostName -> ServiceName -> IO Connection
 newTCPConnection host port = do
   sock <- atomically $ newEmptyTMVar
   return Connection {
     connSocket = sock,
-    connConnect = connectSock host port,
+    connConnect = do
+        (s,_) <- connectSock host port
+        return s,
     connSend = send,
     connReceive = recv
     }
