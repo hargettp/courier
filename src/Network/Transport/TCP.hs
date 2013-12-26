@@ -33,11 +33,9 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Exception
 
-import qualified Data.ByteString as B
 import qualified Data.Map as M
 import Data.Serialize
 import qualified Data.Set as S
-import qualified Data.Text as T
 
 import Network.Socket (sClose,accept)
 import Network.Simple.TCP hiding (accept)
@@ -58,11 +56,13 @@ data TCPTransport = TCPTransport {
   tcpDispatchers :: S.Set (Async ()),
   tcpResolver :: Resolver
   }
-                    
-newTCPConnection :: HostName -> ServiceName -> IO Connection
-newTCPConnection host port = do
+
+newTCPConnection :: Address -> IO Connection
+newTCPConnection address = do
   sock <- atomically $ newEmptyTMVar
+  let (host,port) = parseSocketAddress address
   return Connection {
+    connAddress = address,
     connSocket = sock,
     connConnect = do
         (s,_) <- connectSock host port
@@ -101,26 +101,6 @@ newTCPTransport resolver = do
       }
 
 --------------------------------------------------------------------------------
-                        
-{-|
-Parse a TCP 'Address' into its respective 'HostName' and 'PortNumber' components, on the
-assumption the 'Address' has an identifer in the format @host:port@. If
-the port number is missing from the supplied address, it will default to 0.  If the
-hostname component is missing from the identifier (e.g., just @:port@), then hostname
-is assumed to be @localhost@.
--}
-parseTCPAddress :: Address -> (HostName,ServiceName)
-parseTCPAddress address = 
-  let identifer = T.pack $ address 
-      parts = T.splitOn ":" identifer
-  in if (length parts) > 1 then
-       (host $ T.unpack $ parts !! 0, port $ T.unpack $ parts !! 1)
-     else (host $ T.unpack $ parts !! 0, "0")
-  where
-    host h = if h == "" then
-               "localhost"
-             else h
-    port p = p
 
 tcpScheme :: Scheme
 tcpScheme = "tcp"
@@ -138,7 +118,7 @@ tcpBind transport inc name = do
   atomically $ modifyTVar (tcpBindings transport) $ \bindings ->
     M.insert name inc bindings
   Just address <- resolve (tcpResolver transport) name
-  let (_,port) = parseTCPAddress address
+  let (_,port) = parseSocketAddress address
   listener <- async $ do 
     infoM _log $ "Binding to address " ++ (show address)
     tcpListen address port
@@ -151,7 +131,7 @@ tcpBind transport inc name = do
         listen HostAny port $ \(socket,_) -> 
             catch (do 
                     tcpAccept address socket)
-                   (\e -> do 
+                    (\e -> do 
                            warningM _log $ "Listen error: " ++ (show (e :: SomeException)))
     tcpAccept address socket = do
       infoM _log $ "Listening for connections on " ++ (show address) ++ ": " ++ (show socket)
@@ -166,7 +146,9 @@ tcpBind transport inc name = do
         Just (IdentifyMessage clientAddress) -> do
           infoM _log $ "Identified " ++ (show clientAddress)
           clientSocket <- atomically $ newTMVar client
-          msngr <- newMessenger clientSocket clientAddress (tcpInbound transport)
+          newConn <- newTCPConnection clientAddress
+          let conn = newConn {connSocket = clientSocket}
+          msngr <- newMessenger conn (tcpInbound transport)
           found <- atomically $ do 
             msngrs <- readTVar $ tcpMessengers transport
             return $ M.lookup clientAddress msngrs
@@ -220,7 +202,9 @@ tcpSendTo transport name msg = do
           msngrs <- atomically $ readTVar $ tcpMessengers transport
           infoM _log $ "No messenger for " ++ (show address) ++ " in " ++ (show msngrs)
           socketVar <- atomically $ newEmptyTMVar
-          msngr <- newMessenger socketVar address (tcpInbound transport)
+          newConn <- newTCPConnection address
+          let conn = newConn {connSocket = socketVar}
+          msngr <- newMessenger conn (tcpInbound transport)
           addMessenger transport address msngr
           identifyAll msngr
           deliver msngr env
@@ -248,20 +232,7 @@ tcpShutdown transport = do
   infoM _log $ "Closing dispatcher"
   mapM_ cancel $ S.toList $ tcpDispatchers transport
   mapM_ wait $ S.toList $ tcpDispatchers transport
-                 
-newMessenger :: TMVar Socket -> Address -> Mailbox -> IO Messenger                 
-newMessenger socket address inc = do
-  out <- newMailbox
-  sndr <- async $ sender socket address out
-  rcvr <- async $ receiver socket address inc
-  return Messenger {
-    messengerOut = out,
-    messengerAddress = address,
-    messengerSender = sndr,
-    messengerReceiver = rcvr,
-    messengerSocket = socket
-    }
-                 
+
 addMessenger :: TCPTransport -> Address -> Messenger -> IO ()
 addMessenger transport address msngr = do
   msngrs <- atomically $ do
@@ -270,50 +241,11 @@ addMessenger transport address msngr = do
         return msngrs
   infoM _log $ "Added messenger to " ++ (show address) ++ "; messengers are " ++ (show msngrs)
 
-closeMessenger :: Messenger -> IO ()                 
+closeMessenger :: Messenger -> IO ()
 closeMessenger msngr = do
   cancel $ messengerSender msngr
   cancel $ messengerReceiver msngr
-  open <- atomically $ tryTakeTMVar $ messengerSocket msngr
+  open <- atomically $ tryTakeTMVar $ connSocket $ messengerConnection msngr
   case open of
     Just socket -> sClose socket
     Nothing -> return ()
-    
-
-sender :: TMVar Socket -> Address -> Mailbox -> IO ()
-sender socketVar address mailbox = sendMessages
-  where
-    sendMessages = do
-      reconnect
-      catch (do
-                infoM _log $ "Waiting to send to " ++ (show address)
-                msg <- atomically $ readTQueue mailbox
-                infoM _log $ "Sending message to " ++ (show address)
-                connected <- atomically $ tryReadTMVar socketVar
-                case connected of
-                  Just socket -> do 
-                    send socket $ encode (B.length msg)
-                    infoM _log $ "Length sent"
-                    send socket msg
-                    infoM _log $ "Message sent to" ++ (show address)
-                  Nothing -> return ()
-            ) (\e -> do
-                  warningM _log $ "Send error: " ++ (show (e :: SomeException))
-                  disconnect)
-      sendMessages
-    reconnect = do
-      -- TODO need a timeout here, in case connecting always fails
-      connected <- atomically $ tryReadTMVar socketVar
-      case connected of
-        Just _ -> return ()
-        Nothing -> do
-          let (host,port) = parseTCPAddress address
-          infoM _log $ "Connecting to " ++ (show host) ++ ":" ++ (show port) -- (show address)
-          (socket,sockAddr) <- connectSock host port
-          infoM _log $ "Connected to " ++ (show address) ++ ": " ++ (show sockAddr)
-          atomically $ putTMVar socketVar socket
-    disconnect = do
-      connected <- atomically $ tryTakeTMVar socketVar
-      case connected of
-        Just socket -> sClose socket
-        Nothing -> return ()

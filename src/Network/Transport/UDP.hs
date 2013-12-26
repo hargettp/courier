@@ -36,7 +36,7 @@ import qualified Data.ByteString as B
 import qualified Data.Map as M
 import qualified Data.Set as S
 
-import Network.Socket (HostName,ServiceName,Socket,socket,Family(..),SocketType(..),defaultProtocol)
+import Network.Socket (ServiceName,Socket,socket,Family(..),SocketType(..),defaultProtocol)
 import Network.Socket.ByteString(sendAll,recv)
 
 --------------------------------------------------------------------------------
@@ -54,18 +54,19 @@ data UDPTransport = UDPTransport {
   udpResolver :: Resolver
   }
 
-newUDPConnection :: HostName -> ServiceName -> IO Connection
-newUDPConnection host port = do
-  sock <- atomically $ newEmptyTMVar
+newUDPConnection :: Address -> IO Connection
+newUDPConnection address = do
+  sock <- atomically newEmptyTMVar
   return Connection {
+    connAddress = address,
     connSocket = sock,
     connConnect = socket AF_INET6 Datagram defaultProtocol,
     connSend = sendAll,
     connReceive = udpReceive
     }
   where
-      udpReceive socket byteCount = do
-          bytes <- recv socket byteCount
+      udpReceive sock byteCount = do
+          bytes <- recv sock byteCount
           if B.null bytes
             then return Nothing 
             else return $ Just bytes

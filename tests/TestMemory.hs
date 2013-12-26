@@ -18,8 +18,7 @@ import Test.Framework.Providers.HUnit
 -----------------------------------------------------------------------------
 
 tests :: [Test.Framework.Test]
-tests = 
-  [
+tests = [
     testCase "mem-endpoints+transport" testEndpointTransport,
     testCase "mem-bind" testEndpointBind,
     testCase "mem-unbind" testEndpointBindUnbind,
