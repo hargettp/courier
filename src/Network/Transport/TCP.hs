@@ -240,12 +240,3 @@ addMessenger transport address msngr = do
         msngrs <- readTVar (tcpMessengers transport)
         return msngrs
   infoM _log $ "Added messenger to " ++ (show address) ++ "; messengers are " ++ (show msngrs)
-
-closeMessenger :: Messenger -> IO ()
-closeMessenger msngr = do
-  cancel $ messengerSender msngr
-  cancel $ messengerReceiver msngr
-  open <- atomically $ tryTakeTMVar $ connSocket $ messengerConnection msngr
-  case open of
-    Just socket -> sClose socket
-    Nothing -> return ()

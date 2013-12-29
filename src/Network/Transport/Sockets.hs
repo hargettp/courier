@@ -23,6 +23,7 @@ module Network.Transport.Sockets (
 
   Messenger(..),
   newMessenger,
+  closeMessenger,
 
   dispatcher,
   sender,
@@ -218,3 +219,12 @@ receiveMessage socket = catch (do
   where
     msgLength (Right size) = size
     msgLength (Left err) = error err
+
+closeMessenger :: Messenger -> IO ()
+closeMessenger msngr = do
+  cancel $ messengerSender msngr
+  cancel $ messengerReceiver msngr
+  open <- atomically $ tryTakeTMVar $ connSocket $ messengerConnection msngr
+  case open of
+    Just socket -> sClose socket
+    Nothing -> return ()

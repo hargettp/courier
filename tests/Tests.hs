@@ -17,6 +17,7 @@ import Test.Framework.Providers.HUnit
 -- Test modules
 import qualified TestMemory as M
 import qualified TestTCP as T
+import qualified TestUDP as U
 
 -----------------------------------------------------------------------------
 -----------------------------------------------------------------------------
@@ -25,7 +26,7 @@ main :: IO ()
 main = do 
   initLogging
   defaultMain tests
-  
+
 initLogging :: IO ()  
 initLogging = do
   let logFile = "tests.log"
@@ -38,15 +39,14 @@ initLogging = do
   updateGlobalLogger rootLoggerName (addHandler s)
 
 tests :: [Test.Framework.Test]
-tests = 
+tests =
   [
     testCase "hunit" (assertBool "HUnit assertion of truth is false" True),
     testCase "endpoints" testEndpoint
-  ] 
+  ]
   ++ M.tests
   ++ T.tests
-  -- ++ D.tests
-  -- ++ S.tests
+  ++ U.tests
 
 -- Endpoint tests
 
