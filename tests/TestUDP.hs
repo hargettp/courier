@@ -37,9 +37,9 @@ address2 = "localhost:2004"
 tests :: [Test.Framework.Test]
 tests = 
   [
-    testCase "udp-endpoints+transport" testEndpointTransport,
-    testCase "udp-bind-unbind" testEndpointBindUnbind,
-    testCase "udp-send-receive" testEndpointSendReceive --,
+    testCase "udp-endpoints+transport" testEndpointTransport --,
+    -- testCase "udp-bind-unbind" testEndpointBindUnbind,
+    -- testCase "udp-send-receive" testEndpointSendReceive --,
     {-
     testCase "udp-double-send-receive" testEndpointDoubleSendReceive,
     testCase "udp-send-receive-reply" testEndpointSendReceiveReply,

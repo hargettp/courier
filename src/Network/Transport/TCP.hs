@@ -49,8 +49,7 @@ _log :: String
 _log = "transport.tcp"
 
 data TCPTransport = TCPTransport {
-  tcpListeners :: TVar (M.Map ServiceName Socket),
-  tcpMessengers :: TVar (M.Map Address Messenger),  
+  tcpMessengers :: TVar (M.Map Address Messenger),
   tcpBindings :: TVar (M.Map Name Mailbox),
   tcpInbound :: Mailbox,
   tcpDispatchers :: S.Set (Async ()),
@@ -78,14 +77,12 @@ different instances will still be able to communicate, provided they use
 correct TCP/IP addresses (or hostnames) for communication.
 -}
 newTCPTransport :: Resolver -> IO Transport
-newTCPTransport resolver = do 
-  listeners <- atomically $ newTVar M.empty
+newTCPTransport resolver = do
   messengers <- atomically $ newTVar M.empty
   bindings <- atomically $ newTVar M.empty
   inbound <- newMailbox
   dispatch <- async $ dispatcher bindings inbound
   let transport = TCPTransport {
-        tcpListeners = listeners,
         tcpMessengers = messengers,
         tcpBindings = bindings,
         tcpInbound = inbound,
@@ -160,7 +157,7 @@ tcpBind transport inc name = do
               addMessenger transport clientAddress msngr
     tcpIdentify client clientAddress = do
       infoM _log $ "Awaiting identity from " ++ (show clientAddress)
-      maybeMsg <- receiveMessage client
+      maybeMsg <- receiveSocketMessage client
       case maybeMsg of
         Nothing -> return Nothing
         Just bytes -> do
@@ -226,9 +223,6 @@ tcpShutdown transport = do
   infoM _log $ "Closing messengers"
   msngrs <- atomically $ readTVar $ tcpMessengers transport
   mapM_ closeMessenger $ M.elems msngrs
-  infoM _log $ "Closing listeners"
-  listeners <- atomically $ readTVar $ tcpListeners transport
-  mapM_ sClose $ M.elems listeners
   infoM _log $ "Closing dispatcher"
   mapM_ cancel $ S.toList $ tcpDispatchers transport
   mapM_ wait $ S.toList $ tcpDispatchers transport

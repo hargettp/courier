@@ -28,7 +28,7 @@ module Network.Transport.Sockets (
   dispatcher,
   sender,
   receiver,
-  receiveMessage,
+  receiveSocketMessage,
   SocketSend,
 
   parseSocketAddress
@@ -192,7 +192,7 @@ receiver conn mailbox  = receiveMessages
     receiveMessages = catch (do
       infoM _log $ "Waiting to receive from " ++ (show $ connAddress conn)
       socket <- atomically $ readTMVar $ connSocket conn
-      maybeMsg <- receiveMessage socket
+      maybeMsg <- receiveSocketMessage socket
       infoM _log $ "Received message from " ++ (show $ connAddress conn)
       case maybeMsg of
         Nothing -> do
@@ -203,8 +203,8 @@ receiver conn mailbox  = receiveMessages
           receiveMessages) (\e -> do 
                            warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
 
-receiveMessage :: Socket -> IO (Maybe Message)
-receiveMessage socket = catch (do
+receiveSocketMessage :: Socket -> IO (Maybe Message)
+receiveSocketMessage socket = catch (do
   maybeLen <- recv socket 8 -- TODO must figure out what defines length of an integer in bytes 
   case maybeLen of
     Nothing -> do

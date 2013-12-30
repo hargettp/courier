@@ -37,8 +37,6 @@ import Data.Serialize
 import qualified Data.Set as S
 
 import Network.Socket (
-    ServiceName,
-    Socket,
     SockAddr(..),
     iNADDR_ANY,
     socket,
@@ -61,8 +59,7 @@ udpScheme :: Scheme
 udpScheme = "udp"
 
 data UDPTransport = UDPTransport {
-  udpListeners :: TVar (M.Map ServiceName Socket),
-  udpMessengers :: TVar (M.Map Address Messenger),  
+  udpMessengers :: TVar (M.Map Address Messenger),
   udpBindings :: TVar (M.Map Name Mailbox),
   udpInbound :: Mailbox,
   udpDispatchers :: S.Set (Async ()),
@@ -87,14 +84,12 @@ newUDPConnection address = do
             else return $ Just bytes
 
 newUDPTransport :: Resolver -> IO Transport
-newUDPTransport resolver = do 
-  listeners <- atomically $ newTVar M.empty
+newUDPTransport resolver = do
   messengers <- atomically $ newTVar M.empty
   bindings <- atomically $ newTVar M.empty
   inbound <- newMailbox
   dispatch <- async $ dispatcher bindings inbound
   let transport = UDPTransport {
-        udpListeners = listeners,
         udpMessengers = messengers,
         udpBindings = bindings,
         udpInbound = inbound,
@@ -128,7 +123,7 @@ udpBind transport _ name = do
     return $ Right Binding {
         bindingName = name,
         unbind = sClose sock
-    }
+        }
 
 udpSendTo :: UDPTransport -> Name -> Message -> IO ()
 udpSendTo transport name msg = do
@@ -184,9 +179,6 @@ udpShutdown transport = do
   infoM _log $ "Closing messengers"
   msngrs <- atomically $ readTVar $ udpMessengers transport
   mapM_ closeMessenger $ M.elems msngrs
-  infoM _log $ "Closing listeners"
-  listeners <- atomically $ readTVar $ udpListeners transport
-  mapM_ sClose $ M.elems listeners
   infoM _log $ "Closing dispatcher"
   mapM_ cancel $ S.toList $ udpDispatchers transport
   mapM_ wait $ S.toList $ udpDispatchers transport
