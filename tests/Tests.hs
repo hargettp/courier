@@ -27,15 +27,15 @@ main = do
   initLogging
   defaultMain tests
 
-initLogging :: IO ()  
+initLogging :: IO ()
 initLogging = do
   let logFile = "tests.log"
   exists <- doesFileExist logFile
-  if exists 
-    then removeFile logFile  
+  if exists
+    then removeFile logFile
     else return ()
   s <- fileHandler logFile INFO
-  updateGlobalLogger rootLoggerName (setLevel ERROR)
+  updateGlobalLogger rootLoggerName (setLevel WARNING)
   updateGlobalLogger rootLoggerName (addHandler s)
 
 tests :: [Test.Framework.Test]

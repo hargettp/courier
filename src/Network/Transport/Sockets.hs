@@ -29,9 +29,12 @@ module Network.Transport.Sockets (
   sender,
   receiver,
   receiveSocketMessage,
+  receiveSocketMessages,
   SocketSend,
 
-  parseSocketAddress
+  parseSocketAddress,
+  lookupAddresses,
+  lookupAddress
 
   ) where
 
@@ -87,14 +90,32 @@ parseSocketAddress address =
              else h
     port p = p
 
+lookupAddresses :: (HostName,ServiceName) -> IO [SockAddr]
+lookupAddresses hostAndPort = 
+    let (host,port) = hostAndPort
+        hints = defaultHints { addrFlags = [AI_ADDRCONFIG, AI_CANONNAME, AI_NUMERICSERV] }
+    in do 
+          addresses <- getAddrInfo (Just hints) (Just host) (Just port)
+          return $ map addrAddress addresses
+
+lookupAddress :: (HostName,ServiceName) -> IO SockAddr
+lookupAddress hostAndPort = do
+    addresses <- lookupAddresses hostAndPort
+    return $ addresses !! 0
+
 type SocketSend = Socket -> B.ByteString -> IO ()
 
+{-|
+A connection specializes the use of a transport for a particular
+destination.
+-}
 data Connection = Connection {
   connAddress :: Address,
   connSocket :: TMVar Socket,
   connConnect :: IO Socket,
   connSend :: Socket -> B.ByteString -> IO (),
-  connReceive :: Socket -> Int -> IO (Maybe B.ByteString)
+  connReceive :: Socket -> Int -> IO (Maybe B.ByteString),
+  connClose :: IO ()
   }
 
 data Messenger = Messenger {
@@ -128,8 +149,8 @@ dispatcher bindings mbox = dispatchMessages
                                  infoM _log $ "Dispatching messages"
                                  env <- atomically $ readTQueue mbox
                                  dispatchMessage env
-                                 dispatchMessages) 
-                       (\e -> do 
+                                 dispatchMessages)
+                       (\e -> do
                            warningM _log $ "Dispatch error: " ++ (show (e :: SomeException)))
     dispatchMessage env = do
       infoM _log $ "Dispatching message"
@@ -159,15 +180,17 @@ sender conn mailbox = sendMessages
                 infoM _log $ "Sending message to " ++ (show $ connAddress conn)
                 connected <- atomically $ tryReadTMVar $ connSocket conn
                 case connected of
-                  Just socket -> do 
-                    (connSend conn) socket $ encode (B.length msg)
-                    infoM _log $ "Length sent"
-                    (connSend conn) socket msg
-                    infoM _log $ "Message sent to" ++ (show $ connAddress conn)
+                  Just socket -> do
+                      (connSend conn) socket msg
+                    -- (connSend conn) socket $ encode (B.length msg)
+                    -- infoM _log $ "Length sent"
+                    -- (connSend conn) socket msg
+                    -- infoM _log $ "Message sent to" ++ (show $ connAddress conn)
                   Nothing -> return ()
-            ) (\e -> do
-                  warningM _log $ "Send error: " ++ (show (e :: SomeException))
-                  disconnect)
+            )
+            (\e -> do
+                warningM _log $ "Send error: " ++ (show (e :: SomeException))
+                disconnect)
       sendMessages
     reconnect = do
       -- TODO need a timeout here, in case connecting always fails
@@ -187,20 +210,22 @@ sender conn mailbox = sendMessages
         Nothing -> return ()
 
 receiver :: Connection -> Mailbox -> IO ()
-receiver conn mailbox  = receiveMessages
-  where
-    receiveMessages = catch (do
-      infoM _log $ "Waiting to receive from " ++ (show $ connAddress conn)
-      socket <- atomically $ readTMVar $ connSocket conn
-      maybeMsg <- receiveSocketMessage socket
-      infoM _log $ "Received message from " ++ (show $ connAddress conn)
+receiver conn mailbox  = do 
+    socket <- atomically $ readTMVar $ connSocket conn
+    receiveSocketMessages socket (connAddress conn) mailbox
+
+receiveSocketMessages :: Socket -> Address -> Mailbox -> IO ()
+receiveSocketMessages sock addr mailbox = catch (do
+      infoM _log $ "Waiting to receive on " ++ (show addr)
+      maybeMsg <- receiveSocketMessage sock
+      infoM _log $ "Received message on " ++ (show addr)
       case maybeMsg of
         Nothing -> do
-          sClose socket
+          sClose sock
           return ()
         Just msg -> do
           atomically $ writeTQueue mailbox msg
-          receiveMessages) (\e -> do 
+          receiveSocketMessages sock addr mailbox) (\e -> do 
                            warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
 
 receiveSocketMessage :: Socket -> IO (Maybe Message)
@@ -224,7 +249,4 @@ closeMessenger :: Messenger -> IO ()
 closeMessenger msngr = do
   cancel $ messengerSender msngr
   cancel $ messengerReceiver msngr
-  open <- atomically $ tryTakeTMVar $ connSocket $ messengerConnection msngr
-  case open of
-    Just socket -> sClose socket
-    Nothing -> return ()
+  connClose $ messengerConnection msngr

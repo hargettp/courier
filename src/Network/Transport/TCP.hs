@@ -33,6 +33,7 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Exception
 
+import qualified Data.ByteString as B
 import qualified Data.Map as M
 import Data.Serialize
 import qualified Data.Set as S
@@ -66,8 +67,14 @@ newTCPConnection address = do
     connConnect = do
         (s,_) <- connectSock host port
         return s,
-    connSend = send,
-    connReceive = recv
+    -- connSend = send,
+    connSend = tcpSend address,
+    connReceive = recv,
+    connClose = do
+        open <- atomically $ tryTakeTMVar sock
+        case open of
+            Just socket -> sClose socket
+            Nothing -> return ()
     }
 
 {-|
@@ -111,7 +118,7 @@ tcpHandles transport name = do
     isJust _ = False
 
 tcpBind :: TCPTransport -> Mailbox -> Name -> IO (Either String Binding)
-tcpBind transport inc name = do  
+tcpBind transport inc name = do
   atomically $ modifyTVar (tcpBindings transport) $ \bindings ->
     M.insert name inc bindings
   Just address <- resolve (tcpResolver transport) name
@@ -146,7 +153,7 @@ tcpBind transport inc name = do
           newConn <- newTCPConnection clientAddress
           let conn = newConn {connSocket = clientSocket}
           msngr <- newMessenger conn (tcpInbound transport)
-          found <- atomically $ do 
+          found <- atomically $ do
             msngrs <- readTVar $ tcpMessengers transport
             return $ M.lookup clientAddress msngrs
           case found of
@@ -217,6 +224,14 @@ tcpSendTo transport name msg = do
       case maybeUniqueAddress of
         Nothing -> return()
         Just uniqueAddress -> deliver msngr $ encode $ IdentifyMessage uniqueAddress
+
+tcpSend :: Address -> Socket -> B.ByteString -> IO ()
+tcpSend addr sock bs = do
+    send sock $ encode (B.length bs)
+    infoM _log $ "Length sent"
+    send sock bs
+    infoM _log $ "Message sent to" ++ (show addr)
+
 
 tcpShutdown :: TCPTransport -> IO ()
 tcpShutdown transport = do

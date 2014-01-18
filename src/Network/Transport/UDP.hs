@@ -30,24 +30,18 @@ import Network.Transport
 
 import Control.Concurrent.Async
 import Control.Concurrent.STM
+import Control.Exception
 
 import qualified Data.ByteString as B
 import qualified Data.Map as M
 import Data.Serialize
 import qualified Data.Set as S
 
-import Network.Socket (
-    SockAddr(..),
-    iNADDR_ANY,
-    socket,
-    sClose,
-    Family(..),
-    SocketType(..),
-    defaultProtocol)
 import qualified Network.Socket as N
-import Network.Socket.ByteString(sendAll,recv)
+import Network.Socket.ByteString(sendAllTo,recvFrom)
 
 import System.Log.Logger
+-- import qualified System.Random as R
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -59,11 +53,12 @@ udpScheme :: Scheme
 udpScheme = "udp"
 
 data UDPTransport = UDPTransport {
-  udpMessengers :: TVar (M.Map Address Messenger),
-  udpBindings :: TVar (M.Map Name Mailbox),
-  udpInbound :: Mailbox,
-  udpDispatchers :: S.Set (Async ()),
-  udpResolver :: Resolver
+    udpSockets :: S.Set N.Socket,
+    udpMessengers :: TVar (M.Map Address Messenger),
+    udpBindings :: TVar (M.Map Name Mailbox),
+    udpInbound :: Mailbox,
+    udpDispatchers :: S.Set (Async ()),
+    udpResolver :: Resolver
   }
 
 newUDPConnection :: Address -> IO Connection
@@ -72,16 +67,15 @@ newUDPConnection address = do
   return Connection {
     connAddress = address,
     connSocket = sock,
-    connConnect = socket AF_INET6 Datagram defaultProtocol,
-    connSend = sendAll,
-    connReceive = udpReceive
+    connConnect = N.socket N.AF_INET N.Datagram N.defaultProtocol,
+    connSend = (\s bs -> do
+        addr <- lookupAddress $ parseSocketAddress address
+        infoM _log $ "Sending via UDP to " ++ (show addr)
+        sendAllTo s bs addr
+        infoM _log $ "Sent via UDP to " ++ (show addr)),
+    connReceive = udpRecvFrom,
+    connClose = return ()
     }
-  where
-      udpReceive sock byteCount = do
-          bytes <- recv sock byteCount
-          if B.null bytes
-            then return Nothing 
-            else return $ Just bytes
 
 newUDPTransport :: Resolver -> IO Transport
 newUDPTransport resolver = do
@@ -90,6 +84,7 @@ newUDPTransport resolver = do
   inbound <- newMailbox
   dispatch <- async $ dispatcher bindings inbound
   let transport = UDPTransport {
+        udpSockets = S.empty,
         udpMessengers = messengers,
         udpBindings = bindings,
         udpInbound = inbound,
@@ -113,16 +108,27 @@ udpHandles transport name = do
     isJust _ = False
 
 udpBind :: UDPTransport -> Mailbox -> Name -> IO (Either String Binding)
-udpBind transport _ name = do
+udpBind transport inc name = do
+    atomically $ modifyTVar (udpBindings transport) $ \bindings ->
+        M.insert name inc bindings
     Just address <- resolve (udpResolver transport) name
     let (_,port) = parseSocketAddress address
-    sock <- socket AF_INET Datagram defaultProtocol
-    let portnum = read port
-    infoM _log $ "Binding to " ++ (show portnum) ++ " over UDP"
-    N.bind sock $ SockAddrInet (N.PortNum portnum) iNADDR_ANY
+    addrinfos <- N.getAddrInfo
+                    (Just (N.defaultHints {N.addrFlags = [N.AI_PASSIVE]}))
+                    Nothing (Just port)
+    let serveraddr = head addrinfos
+    sock <-  N.socket (N.addrFamily serveraddr) N.Datagram N.defaultProtocol
+    -- have to set this option in case we frequently rebind sockets
+    infoM _log $ "Binding to " ++ (show port) ++ " over UDP"
+    N.setSocketOption sock N.ReuseAddr 1
+    N.bindSocket sock $ N.addrAddress serveraddr
+    infoM _log $ "Bound to " ++ (show port) ++ " over UDP"
+    rcvr <- async $ udpReceiveSocketMessages sock address (udpInbound transport)
     return $ Right Binding {
         bindingName = name,
-        unbind = sClose sock
+        unbind = do
+            cancel rcvr
+            N.sClose sock
         }
 
 udpSendTo :: UDPTransport -> Name -> Message -> IO ()
@@ -141,7 +147,7 @@ udpSendTo transport name msg = do
         Just mbox -> do
           atomically $ writeTQueue mbox msg
           return True
-    remote = do 
+    remote = do
       Just address <- resolve (udpResolver transport) name
       let env = encode $ Envelope {
             envelopeDestination = name,
@@ -159,23 +165,43 @@ udpSendTo transport name msg = do
           let conn = newConn {connSocket = socketVar}
           msngr <- newMessenger conn (udpInbound transport)
           addMessenger transport address msngr
-          identifyAll msngr
           deliver msngr env
           return ()
         Just msngr -> deliver msngr env
     deliver msngr message = atomically $ writeTQueue (messengerOut msngr) message
-    identifyAll msngr = do
-      bindings <- atomically $ readTVar $ udpBindings transport
-      boundAddresses <- mapM (resolve $ udpResolver transport) (M.keys bindings)
-      let uniqueAddresses = S.toList $ S.fromList boundAddresses
-      mapM_ (identify msngr) uniqueAddresses
-    identify msngr maybeUniqueAddress= do
-      case maybeUniqueAddress of
-        Nothing -> return()
-        Just uniqueAddress -> deliver msngr $ encode $ IdentifyMessage uniqueAddress
+
+udpReceiveSocketMessages :: N.Socket -> Address -> Mailbox -> IO ()
+udpReceiveSocketMessages sock addr mailbox = catch (do
+    infoM _log $ "Waiting to receive via UDP on " ++ (show addr)
+    maybeMsg <- udpReceiveSocketMessage
+    infoM _log $ "Received message via UDP on " ++ (show addr)
+    case maybeMsg of
+        Nothing -> do
+            N.sClose sock
+            return ()
+        Just msg -> do
+            atomically $ writeTQueue mailbox msg
+            udpReceiveSocketMessages sock addr mailbox) (\e -> do 
+                warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
+    where
+        udpReceiveSocketMessage = catch (do
+            maybeMsg <- udpRecvFrom sock 512
+            infoM _log $ "Received message"
+            return maybeMsg) (\e -> do
+                warningM _log $ "Receive error: " ++ (show (e :: SomeException))
+                throw e)
+
+udpRecvFrom :: N.Socket -> Int -> IO (Maybe B.ByteString)
+udpRecvFrom sock count = do
+    (bs,addr) <- recvFrom sock count
+    infoM _log $ "Received UDP message from " ++ (show addr) ++ ": " ++ (show bs)
+    if B.null bs
+        then return Nothing
+        else return $ Just bs
 
 udpShutdown :: UDPTransport -> IO ()
 udpShutdown transport = do
+  infoM _log $ "Unbinding transport"
   infoM _log $ "Closing messengers"
   msngrs <- atomically $ readTVar $ udpMessengers transport
   mapM_ closeMessenger $ M.elems msngrs
