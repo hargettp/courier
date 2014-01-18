@@ -5,14 +5,12 @@ module TestTCP (tests) where
 import Network.Endpoints
 import Network.Transport.TCP
 
+import TestCommon
+
 -- external imports
 
-import Control.Concurrent
 import Control.Exception
 
-import Data.Serialize
-
-import System.Log.Logger
 
 import Test.Framework
 import Test.HUnit
@@ -25,9 +23,6 @@ import Test.Framework.Providers.HUnit
 _log :: String
 _log = "test.transport.tcp"
 
-testDelay :: Int
-testDelay = 1 * 1000000
-
 address1 :: Address
 address1 = "localhost:2001"
 
@@ -35,189 +30,25 @@ address2 :: Address
 address2 = "localhost:2002"
 
 tests :: [Test.Framework.Test]
-tests = 
+tests =
   [
     testCase "tcp-endpoints+transport" testEndpointTransport,
-    testCase "tcp-bind-unbind" testEndpointBindUnbind,
-    testCase "tcp-send-receive" testEndpointSendReceive,
-    testCase "tcp-double-send-receive" testEndpointDoubleSendReceive,
-    testCase "tcp-send-receive-reply" testEndpointSendReceiveReply,
-    testCase "tcp-multiple-send-receive-reply" testEndpointMultipleSendReceiveReply,
-    testCase "tcp-local-send-receive-reply" testEndpointLocalSendReceiveReply
-  ] 
-  
-testEndpointTransport :: Assertion  
-testEndpointTransport = do  
+    testCase "tcp-bind-unbind" $ endpointBindUnbind _log newTCPTransport address1 address2,
+    testCase "tcp-send-receive" $ endpointSendReceive _log newTCPTransport address1 address2,
+    testCase "tcp-double-send-receive" $ endpointDoubleSendReceive _log newTCPTransport address1 address2,
+    testCase "tcp-send-receive-reply" $ endpointSendReceiveReply _log newTCPTransport address1 address2,
+    testCase "tcp-multiple-send-receive-reply" $ endpointMultipleSendReceiveReply _log newTCPTransport address1 address2,
+    testCase "tcp-local-send-receive-reply" $ endpointLocalSendReceiveReply _log newTCPTransport address1 address2
+  ]
+
+testEndpointTransport :: Assertion
+testEndpointTransport = do
   let name1 = "endpoint1"
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),
                                (name2,address2)]
   bracket (newTCPTransport resolver)
           shutdown
-          (\transport -> do 
+          (\transport -> do
             _ <- newEndpoint [transport]
             return ())
-  
-testEndpointBindUnbind :: Assertion
-testEndpointBindUnbind = do  
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
-  let resolver = resolverFromList [(name1,address1),
-                               (name2,address2)]
-  bracket (newTCPTransport resolver)
-          shutdown
-          (\transport -> do 
-            endpoint <- newEndpoint [transport]
-            Right () <- bindEndpoint endpoint name1
-            unbound <- unbindEndpoint endpoint name1
-            case unbound of
-              Left err -> assertFailure $ "Unbind failed: " ++ err
-              Right () -> assertBool "Unbind succeeded" True
-            return ())
-  
-testEndpointSendReceive :: Assertion
-testEndpointSendReceive = do
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
-  let resolver = resolverFromList [(name1,address1),
-                               (name2,address2)]
-  bracket (newTCPTransport resolver)
-    shutdown
-    (\transport1 -> 
-        bracket (newTCPTransport resolver)
-          shutdown
-          (\transport2 -> do 
-              endpoint1 <- newEndpoint [transport1]
-              endpoint2 <- newEndpoint [transport2]
-              Right () <- bindEndpoint endpoint1 name1
-              Right () <- bindEndpoint endpoint2 name2
-              threadDelay testDelay
-
-              infoM _log "Sending message from 1 to 2"
-              sendMessage_ endpoint1 name2 $ encode "hello!"
-              Just msg <- receiveMessageTimeout endpoint2 testDelay
-              assertEqual "Received message not same as sent" (Right "hello!") (decode msg)
-              Right () <- unbindEndpoint endpoint1 name1
-              Right () <- unbindEndpoint endpoint2 name2
-              return ()))
-  
-testEndpointDoubleSendReceive :: Assertion
-testEndpointDoubleSendReceive = do
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
-      name3 = "endpoint3"
-  let resolver = resolverFromList [(name1,address1),
-                               (name2,address2),
-                               (name3,address1)]
-  bracket (newTCPTransport resolver)
-    shutdown
-    (\transport1 -> do 
-        bracket (newTCPTransport resolver)
-          shutdown
-          (\transport2 -> do  
-              endpoint1 <- newEndpoint [transport1]
-              endpoint2 <- newEndpoint [transport2]
-              endpoint3 <- newEndpoint [transport1]
-              Right () <- bindEndpoint endpoint1 name1
-              Right () <- bindEndpoint endpoint2 name2
-              Right () <- bindEndpoint endpoint3 name3
-              threadDelay testDelay
-
-              verifiedSend endpoint1 endpoint2 name1 name2 "hello"
-              verifiedSend endpoint3 endpoint2 name3 name2 "ciao!"
-              
-              Right () <- unbindEndpoint endpoint1 name1
-              
-              verifiedSend endpoint3 endpoint2 name3 name2 "hi!"
-              
-              Right () <- unbindEndpoint endpoint2 name2
-              Right () <- unbindEndpoint endpoint3 name3
-              return ()))
-
-testEndpointSendReceiveReply :: Assertion
-testEndpointSendReceiveReply = do
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
-  let resolver = resolverFromList [(name1,address1),
-                                   (name2,address2)]
-  bracket (newTCPTransport resolver)
-    shutdown
-    (\transport1 -> 
-        bracket (newTCPTransport resolver)
-          shutdown
-          (\transport2 -> do 
-              endpoint1 <- newEndpoint [transport1]
-              endpoint2 <- newEndpoint [transport2]
-              Right () <- bindEndpoint endpoint1 name1
-              Right () <- bindEndpoint endpoint2 name2
-              threadDelay testDelay
-              
-              verifiedSend endpoint1 endpoint2 name1 name2 "hello"
-              verifiedSend endpoint2 endpoint1 name2 name1 "hi!"
-              
-              Right () <- unbindEndpoint endpoint1 name1
-              Right () <- unbindEndpoint endpoint2 name2
-                
-              return ()))
-  
-testEndpointLocalSendReceiveReply :: Assertion
-testEndpointLocalSendReceiveReply = do
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
-  let resolver = resolverFromList [(name1,address1),
-                                   (name2,address1)]
-  bracket (newTCPTransport resolver)
-    shutdown
-    (\transport1 -> do
-        endpoint1 <- newEndpoint [transport1]
-        endpoint2 <- newEndpoint [transport1]
-        Right () <- bindEndpoint endpoint1 name1
-        Right () <- bindEndpoint endpoint2 name2
-        threadDelay testDelay
-              
-        verifiedSend endpoint1 endpoint2 name1 name2 "hello"
-        verifiedSend endpoint2 endpoint1 name2 name1 "hi!"
-        
-        Right () <- unbindEndpoint endpoint1 name1
-        Right () <- unbindEndpoint endpoint2 name2
-                
-        return ())
-    
-testEndpointMultipleSendReceiveReply :: Assertion
-testEndpointMultipleSendReceiveReply = do
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
-  let resolver = resolverFromList [(name1,address1),
-                                   (name2,address2)]
-  bracket (newTCPTransport resolver)
-    shutdown
-    (\transport1 -> 
-        bracket (newTCPTransport resolver)
-          shutdown
-          (\transport2 -> do 
-              endpoint1 <- newEndpoint [transport1]
-              endpoint2 <- newEndpoint [transport2]
-              Right () <- bindEndpoint endpoint1 name1
-              Right () <- bindEndpoint endpoint2 name2
-              threadDelay testDelay
-
-              roundtrip endpoint1 endpoint2 name1 name2
-              roundtrip endpoint2 endpoint1 name2 name1
-              roundtrip endpoint1 endpoint2 name1 name2
-              roundtrip endpoint2 endpoint1 name2 name1
-              
-              Right () <- unbindEndpoint endpoint1 name1
-              Right () <- unbindEndpoint endpoint2 name2
-                
-              return ()))
-    where
-      roundtrip endpoint1 endpoint2 name1 name2 = do
-        verifiedSend endpoint1 endpoint2 name1 name2 "hello"                
-        verifiedSend endpoint2 endpoint1 name2 name1 "hi!"
-
-verifiedSend :: Endpoint -> Endpoint -> Name -> Name -> String -> Assertion
-verifiedSend endpoint1 endpoint2 name1 name2 msg = do
-  infoM _log $ "Sending message from " ++ name1 ++ " to " ++ name2
-  sendMessage_ endpoint1 name2 $ encode msg
-  Just msg1 <- receiveMessageTimeout endpoint2 testDelay
-  assertEqual "Received message not same as sent" (Right msg) (decode msg1)

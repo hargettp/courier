@@ -17,24 +17,31 @@
 
 module Network.Transport.Sockets (
 
-  Connection(..),
+    Bindings,
 
-  IdentifyMessage(..),
+    SocketTransport(..),
 
-  Messenger(..),
-  newMessenger,
-  closeMessenger,
+    Connection(..),
 
-  dispatcher,
-  sender,
-  receiver,
-  receiveSocketMessage,
-  receiveSocketMessages,
-  SocketSend,
+    IdentifyMessage(..),
 
-  parseSocketAddress,
-  lookupAddresses,
-  lookupAddress
+    Messenger(..),
+    newMessenger,
+    addMessenger,
+    deliver,
+    closeMessenger,
+
+    dispatcher,
+    sender,
+    socketSendTo,
+    receiver,
+    receiveSocketMessage,
+    receiveSocketMessages,
+    SocketSend,
+
+    parseSocketAddress,
+    lookupAddresses,
+    lookupAddress
 
   ) where
 
@@ -52,6 +59,7 @@ import Control.Exception
 import qualified Data.ByteString as B
 import qualified Data.Map as M
 import Data.Serialize
+import qualified Data.Set as S
 import qualified Data.Text as T
 
 import GHC.Generics
@@ -66,6 +74,47 @@ import System.Log.Logger
 
 _log :: String
 _log = "transport.sockets"
+
+type Bindings = TVar (M.Map Name Mailbox)
+
+data SocketTransport = SocketTransport {
+  socketMessengers :: TVar (M.Map Address Messenger),
+  socketBindings :: Bindings,
+  socketConnection :: Address -> IO Connection,
+  socketMessenger :: Connection -> Mailbox -> IO Messenger,
+  socketInbound :: Mailbox,
+  socketDispatchers :: S.Set (Async ()),
+  socketResolver :: Resolver
+
+}
+
+{-|
+A connection specializes the use of a transport for a particular
+destination.
+-}
+data Connection = Connection {
+  connAddress :: Address,
+  connSocket :: TMVar Socket,
+  connConnect :: IO Socket,
+  connSend :: Socket -> B.ByteString -> IO (),
+  connReceive :: Socket -> Int -> IO (Maybe B.ByteString),
+  connClose :: IO ()
+  }
+
+{-|
+A messenger is a facility that actual uses the mechanisms of a transport
+(and more specifically, of a connection on a transport) to deliver and receive
+messages. The messenger uses 'Mailbox'es internally so that the sending/receiving
+happens asynchronously, allowing applications to move on without regard for
+when any send / receive action actually completes.
+-}
+data Messenger = Messenger {
+  messengerOut :: Mailbox,
+  messengerAddress :: Address,
+  messengerSender :: Async (),
+  messengerReceiver :: Async (),
+  messengerConnection :: Connection
+  }
 
 data IdentifyMessage = IdentifyMessage Address deriving (Generic)
 
@@ -106,27 +155,6 @@ lookupAddress hostAndPort = do
 
 type SocketSend = Socket -> B.ByteString -> IO ()
 
-{-|
-A connection specializes the use of a transport for a particular
-destination.
--}
-data Connection = Connection {
-  connAddress :: Address,
-  connSocket :: TMVar Socket,
-  connConnect :: IO Socket,
-  connSend :: Socket -> B.ByteString -> IO (),
-  connReceive :: Socket -> Int -> IO (Maybe B.ByteString),
-  connClose :: IO ()
-  }
-
-data Messenger = Messenger {
-  messengerOut :: Mailbox,
-  messengerAddress :: Address,
-  messengerSender :: Async (),
-  messengerReceiver :: Async (),
-  messengerConnection :: Connection
-  }
-
 instance Show Messenger where
   show msngr = "Messenger(" ++ (show $ messengerAddress msngr) ++ ")"
 
@@ -143,6 +171,17 @@ newMessenger conn inc = do
     messengerConnection = conn
     }
 
+addMessenger :: SocketTransport -> Address -> Messenger -> IO ()
+addMessenger transport address msngr = do
+  msngrs <- atomically $ do
+        modifyTVar (socketMessengers transport) $ \msngrs -> M.insert address msngr msngrs
+        msngrs <- readTVar (socketMessengers transport)
+        return msngrs
+  infoM _log $ "Added messenger to " ++ (show address) ++ "; messengers are " ++ (show msngrs)
+
+deliver :: Messenger -> Message -> IO ()
+deliver msngr message = atomically $ writeTQueue (messengerOut msngr) message
+    
 dispatcher :: TVar (M.Map Name Mailbox) -> Mailbox -> IO ()
 dispatcher bindings mbox = dispatchMessages
   where
@@ -205,6 +244,45 @@ sender conn mailbox = sendMessages
       case connected of
         Just socket -> sClose socket
         Nothing -> return ()
+
+
+socketSendTo :: SocketTransport -> Name -> Message -> IO ()
+socketSendTo transport name msg = do
+  isLocal <- local
+  if isLocal
+    then return ()
+    else remote
+  where
+    local = do
+      found <- atomically $ do
+        bindings <- readTVar $ socketBindings transport
+        return $ M.lookup name bindings
+      case found of
+        Nothing -> return False
+        Just mbox -> do
+          atomically $ writeTQueue mbox msg
+          return True
+    remote = do
+      Just address <- resolve (socketResolver transport) name
+      let env = encode $ Envelope {
+            envelopeDestination = name,
+            envelopeContents = msg
+            }
+      amsngr <- atomically $ do
+        msngrs <- readTVar $ socketMessengers transport
+        return $ M.lookup address msngrs
+      case amsngr of
+        Nothing -> do
+          msngrs <- atomically $ readTVar $ socketMessengers transport
+          infoM _log $ "No messenger for " ++ (show address) ++ " in " ++ (show msngrs)
+          socketVar <- atomically $ newEmptyTMVar
+          newConn <- (socketConnection transport) address
+          let conn = newConn {connSocket = socketVar}
+          msngr <- (socketMessenger transport) conn (socketInbound transport)
+          addMessenger transport address msngr
+          deliver msngr env
+          return ()
+        Just msngr -> deliver msngr env
 
 receiver :: Connection -> Mailbox -> IO ()
 receiver conn mailbox  = do 

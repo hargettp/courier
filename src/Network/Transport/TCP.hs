@@ -50,14 +50,6 @@ import System.Log.Logger
 _log :: String
 _log = "transport.tcp"
 
-data TCPTransport = TCPTransport {
-  tcpMessengers :: TVar (M.Map Address Messenger),
-  tcpBindings :: TVar (M.Map Name Mailbox),
-  tcpInbound :: Mailbox,
-  tcpDispatchers :: S.Set (Async ()),
-  tcpResolver :: Resolver
-  }
-
 newTCPConnection :: Address -> IO Connection
 newTCPConnection address = do
   sock <- atomically $ newEmptyTMVar
@@ -90,18 +82,20 @@ newTCPTransport resolver = do
   bindings <- atomically $ newTVar M.empty
   inbound <- newMailbox
   dispatch <- async $ dispatcher bindings inbound
-  let transport = TCPTransport {
-        tcpMessengers = messengers,
-        tcpBindings = bindings,
-        tcpInbound = inbound,
-        tcpDispatchers = S.fromList [dispatch],
-        tcpResolver = resolver
+  let transport = SocketTransport {
+        socketMessengers = messengers,
+        socketBindings = bindings,
+        socketInbound = inbound,
+        socketConnection = newTCPConnection,
+        socketMessenger = newTCPMessenger bindings resolver,
+        socketDispatchers = S.fromList [dispatch],
+        socketResolver = resolver
         }
   return Transport {
       scheme = tcpScheme,
       handles = tcpHandles transport,
       bind = tcpBind transport,
-      sendTo = tcpSendTo transport,
+      sendTo = socketSendTo transport,
       shutdown = tcpShutdown transport
       }
 
@@ -110,19 +104,19 @@ newTCPTransport resolver = do
 tcpScheme :: Scheme
 tcpScheme = "tcp"
 
-tcpHandles :: TCPTransport -> Name -> IO Bool
+tcpHandles :: SocketTransport -> Name -> IO Bool
 tcpHandles transport name = do 
-  resolved <- resolve (tcpResolver transport) name
+  resolved <- resolve (socketResolver transport) name
   return $ isJust resolved
   where
     isJust (Just _) = True
     isJust _ = False
 
-tcpBind :: TCPTransport -> Mailbox -> Name -> IO (Either String Binding)
+tcpBind :: SocketTransport -> Mailbox -> Name -> IO (Either String Binding)
 tcpBind transport inc name = do
-  atomically $ modifyTVar (tcpBindings transport) $ \bindings ->
+  atomically $ modifyTVar (socketBindings transport) $ \bindings ->
     M.insert name inc bindings
-  Just address <- resolve (tcpResolver transport) name
+  Just address <- resolve (socketResolver transport) name
   let (_,port) = parseSocketAddress address
   listener <- async $ do 
     infoM _log $ "Binding to address " ++ (show address)
@@ -153,9 +147,9 @@ tcpBind transport inc name = do
           clientSocket <- atomically $ newTMVar client
           newConn <- newTCPConnection clientAddress
           let conn = newConn {connSocket = clientSocket}
-          msngr <- newMessenger conn (tcpInbound transport)
+          msngr <- newMessenger conn (socketInbound transport)
           found <- atomically $ do
-            msngrs <- readTVar $ tcpMessengers transport
+            msngrs <- readTVar $ socketMessengers transport
             return $ M.lookup clientAddress msngrs
           case found of
             Just _ -> do
@@ -177,54 +171,21 @@ tcpBind transport inc name = do
       infoM _log $ "Unbinding from port " ++ (show address)
       cancel listener
 
-tcpSendTo :: TCPTransport -> Name -> Message -> IO ()
-tcpSendTo transport name msg = do
-  isLocal <- local
-  if isLocal
-    then return ()
-    else remote
-  where
-    local = do
-      found <- atomically $ do
-        bindings <- readTVar $ tcpBindings transport
-        return $ M.lookup name bindings
-      case found of
-        Nothing -> return False
-        Just mbox -> do
-          atomically $ writeTQueue mbox msg
-          return True
-    remote = do 
-      Just address <- resolve (tcpResolver transport) name
-      let env = encode $ Envelope {
-            envelopeDestination = name,
-            envelopeContents = msg
-            }
-      amsngr <- atomically $ do
-        msngrs <- readTVar $ tcpMessengers transport
-        return $ M.lookup address msngrs
-      case amsngr of
-        Nothing -> do
-          msngrs <- atomically $ readTVar $ tcpMessengers transport
-          infoM _log $ "No messenger for " ++ (show address) ++ " in " ++ (show msngrs)
-          socketVar <- atomically $ newEmptyTMVar
-          newConn <- newTCPConnection address
-          let conn = newConn {connSocket = socketVar}
-          msngr <- newMessenger conn (tcpInbound transport)
-          addMessenger transport address msngr
-          identifyAll msngr
-          deliver msngr env
-          return ()
-        Just msngr -> deliver msngr env
-    deliver msngr message = atomically $ writeTQueue (messengerOut msngr) message
-    identifyAll msngr = do
-      bindings <- atomically $ readTVar $ tcpBindings transport
-      boundAddresses <- mapM (resolve $ tcpResolver transport) (M.keys bindings)
-      let uniqueAddresses = S.toList $ S.fromList boundAddresses
-      mapM_ (identify msngr) uniqueAddresses
-    identify msngr maybeUniqueAddress= do
-      case maybeUniqueAddress of
-        Nothing -> return()
-        Just uniqueAddress -> deliver msngr $ encode $ IdentifyMessage uniqueAddress
+newTCPMessenger :: Bindings -> Resolver -> Connection -> Mailbox -> IO Messenger
+newTCPMessenger bindings resolver conn mailbox = do
+    msngr <- newMessenger conn mailbox
+    identifyAll msngr
+    return msngr
+    where
+        identifyAll msngr = do
+            bs <- atomically $ readTVar bindings
+            boundAddresses <- mapM (resolve resolver) (M.keys bs)
+            let uniqueAddresses = S.toList $ S.fromList boundAddresses
+            mapM_ (identify msngr) uniqueAddresses
+        identify msngr maybeUniqueAddress= do
+            case maybeUniqueAddress of
+                Nothing -> return()
+                Just uniqueAddress -> deliver msngr $ encode $ IdentifyMessage uniqueAddress
 
 tcpSend :: Address -> Socket -> B.ByteString -> IO ()
 tcpSend addr sock bs = do
@@ -234,19 +195,11 @@ tcpSend addr sock bs = do
     infoM _log $ "Message sent to" ++ (show addr)
 
 
-tcpShutdown :: TCPTransport -> IO ()
+tcpShutdown :: SocketTransport -> IO ()
 tcpShutdown transport = do
   infoM _log $ "Closing messengers"
-  msngrs <- atomically $ readTVar $ tcpMessengers transport
+  msngrs <- atomically $ readTVar $ socketMessengers transport
   mapM_ closeMessenger $ M.elems msngrs
   infoM _log $ "Closing dispatcher"
-  mapM_ cancel $ S.toList $ tcpDispatchers transport
-  mapM_ wait $ S.toList $ tcpDispatchers transport
-
-addMessenger :: TCPTransport -> Address -> Messenger -> IO ()
-addMessenger transport address msngr = do
-  msngrs <- atomically $ do
-        modifyTVar (tcpMessengers transport) $ \msngrs -> M.insert address msngr msngrs
-        msngrs <- readTVar (tcpMessengers transport)
-        return msngrs
-  infoM _log $ "Added messenger to " ++ (show address) ++ "; messengers are " ++ (show msngrs)
+  mapM_ cancel $ S.toList $ socketDispatchers transport
+  mapM_ wait $ S.toList $ socketDispatchers transport

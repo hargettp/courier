@@ -53,8 +53,10 @@ Test-Suite test-courier
     type: exitcode-stdio-1.0
     hs-source-dirs: tests
     main-is: Tests.hs
-    other-modules:       TestMemory,
-                          TestTCP
+    other-modules:       TestCommon,
+                         TestMemory,
+                         TestTCP,
+                         TestUDP,
     build-depends: 
 
         -- base modules

@@ -35,7 +35,6 @@ import Control.Exception
 
 import qualified Data.ByteString as B
 import qualified Data.Map as M
-import Data.Serialize
 import qualified Data.Set as S
 
 import qualified Network.Socket as N
@@ -52,15 +51,6 @@ _log = "transport.udp"
 
 udpScheme :: Scheme
 udpScheme = "udp"
-
-data UDPTransport = UDPTransport {
-    udpSockets :: S.Set N.Socket,
-    udpMessengers :: TVar (M.Map Address Messenger),
-    udpBindings :: TVar (M.Map Name Mailbox),
-    udpInbound :: Mailbox,
-    udpDispatchers :: S.Set (Async ()),
-    udpResolver :: Resolver
-  }
 
 newUDPConnection :: Address -> IO Connection
 newUDPConnection address = do
@@ -84,35 +74,36 @@ newUDPTransport resolver = do
   bindings <- atomically $ newTVar M.empty
   inbound <- newMailbox
   dispatch <- async $ dispatcher bindings inbound
-  let transport = UDPTransport {
-        udpSockets = S.empty,
-        udpMessengers = messengers,
-        udpBindings = bindings,
-        udpInbound = inbound,
-        udpDispatchers = S.fromList [dispatch],
-        udpResolver = resolver
+  let transport = SocketTransport {
+        socketMessengers = messengers,
+        socketBindings = bindings,
+        socketInbound = inbound,
+        socketConnection = newUDPConnection,
+        socketMessenger = newUDPMessenger,
+        socketDispatchers = S.fromList [dispatch],
+        socketResolver = resolver
         }
   return Transport {
       scheme = udpScheme,
       handles = udpHandles transport,
       bind = udpBind transport,
-      sendTo = udpSendTo transport,
+      sendTo = socketSendTo transport,
       shutdown = udpShutdown transport
       }
 
-udpHandles :: UDPTransport -> Name -> IO Bool
+udpHandles :: SocketTransport -> Name -> IO Bool
 udpHandles transport name = do 
-  resolved <- resolve (udpResolver transport) name
+  resolved <- resolve (socketResolver transport) name
   return $ isJust resolved
   where
     isJust (Just _) = True
     isJust _ = False
 
-udpBind :: UDPTransport -> Mailbox -> Name -> IO (Either String Binding)
+udpBind :: SocketTransport -> Mailbox -> Name -> IO (Either String Binding)
 udpBind transport inc name = do
-    atomically $ modifyTVar (udpBindings transport) $ \bindings ->
+    atomically $ modifyTVar (socketBindings transport) $ \bindings ->
         M.insert name inc bindings
-    Just address <- resolve (udpResolver transport) name
+    Just address <- resolve (socketResolver transport) name
     let (_,port) = parseSocketAddress address
     addrinfos <- N.getAddrInfo
                     (Just (N.defaultHints {N.addrFlags = [N.AI_PASSIVE]}))
@@ -124,7 +115,7 @@ udpBind transport inc name = do
     N.setSocketOption sock N.ReuseAddr 1
     N.bindSocket sock $ N.addrAddress serveraddr
     infoM _log $ "Bound to " ++ (show port) ++ " over UDP"
-    rcvr <- async $ udpReceiveSocketMessages sock address (udpInbound transport)
+    rcvr <- async $ udpReceiveSocketMessages sock address (socketInbound transport)
     return $ Right Binding {
         bindingName = name,
         unbind = do
@@ -132,44 +123,10 @@ udpBind transport inc name = do
             N.sClose sock
         }
 
-udpSendTo :: UDPTransport -> Name -> Message -> IO ()
-udpSendTo transport name msg = do
-  isLocal <- local
-  if isLocal
-    then return ()
-    else remote
-  where
-    local = do
-      found <- atomically $ do
-        bindings <- readTVar $ udpBindings transport
-        return $ M.lookup name bindings
-      case found of
-        Nothing -> return False
-        Just mbox -> do
-          atomically $ writeTQueue mbox msg
-          return True
-    remote = do
-      Just address <- resolve (udpResolver transport) name
-      let env = encode $ Envelope {
-            envelopeDestination = name,
-            envelopeContents = msg
-            }
-      amsngr <- atomically $ do
-        msngrs <- readTVar $ udpMessengers transport
-        return $ M.lookup address msngrs
-      case amsngr of
-        Nothing -> do
-          msngrs <- atomically $ readTVar $ udpMessengers transport
-          infoM _log $ "No messenger for " ++ (show address) ++ " in " ++ (show msngrs)
-          socketVar <- atomically $ newEmptyTMVar
-          newConn <- newUDPConnection address
-          let conn = newConn {connSocket = socketVar}
-          msngr <- newMessenger conn (udpInbound transport)
-          addMessenger transport address msngr
-          deliver msngr env
-          return ()
-        Just msngr -> deliver msngr env
-    deliver msngr message = atomically $ writeTQueue (messengerOut msngr) message
+newUDPMessenger :: Connection -> Mailbox -> IO Messenger
+newUDPMessenger conn mailbox = do
+    msngr <- newMessenger conn mailbox
+    return msngr
 
 udpReceiveSocketMessages :: N.Socket -> Address -> Mailbox -> IO ()
 udpReceiveSocketMessages sock addr mailbox = catchExceptions (do
@@ -198,20 +155,13 @@ udpRecvFrom sock count = do
         then return Nothing
         else return $ Just bs
 
-udpShutdown :: UDPTransport -> IO ()
+udpShutdown :: SocketTransport -> IO ()
 udpShutdown transport = do
   infoM _log $ "Unbinding transport"
   infoM _log $ "Closing messengers"
-  msngrs <- atomically $ readTVar $ udpMessengers transport
+  msngrs <- atomically $ readTVar $ socketMessengers transport
   mapM_ closeMessenger $ M.elems msngrs
   infoM _log $ "Closing dispatcher"
-  mapM_ cancel $ S.toList $ udpDispatchers transport
-  mapM_ wait $ S.toList $ udpDispatchers transport
+  mapM_ cancel $ S.toList $ socketDispatchers transport
+  mapM_ wait $ S.toList $ socketDispatchers transport
 
-addMessenger :: UDPTransport -> Address -> Messenger -> IO ()
-addMessenger transport address msngr = do
-  msngrs <- atomically $ do
-        modifyTVar (udpMessengers transport) $ \msngrs -> M.insert address msngr msngrs
-        msngrs <- readTVar (udpMessengers transport)
-        return msngrs
-  infoM _log $ "Added messenger to " ++ (show address) ++ "; messengers are " ++ (show msngrs)
