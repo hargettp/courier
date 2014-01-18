@@ -25,6 +25,7 @@ module Network.Transport.TCP (
 -- local imports
 
 import Network.Transport
+import Network.Transport.Internal
 import Network.Transport.Sockets
 
 -- external imports
@@ -133,9 +134,9 @@ tcpBind transport inc name = do
   where
     tcpListen address port = 
         listen HostAny port $ \(socket,_) -> 
-            catch (do 
+            catchExceptions (do 
                     tcpAccept address socket)
-                    (\e -> do 
+                    (\e -> do
                            warningM _log $ "Listen error: " ++ (show (e :: SomeException)))
     tcpAccept address socket = do
       infoM _log $ "Listening for connections on " ++ (show address) ++ ": " ++ (show socket)

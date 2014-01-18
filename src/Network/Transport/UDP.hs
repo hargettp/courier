@@ -23,8 +23,9 @@ module Network.Transport.UDP (
 
 -- local imports
 
-import Network.Transport.Sockets
 import Network.Transport
+import Network.Transport.Internal
+import Network.Transport.Sockets
 
 -- external imports
 
@@ -171,7 +172,7 @@ udpSendTo transport name msg = do
     deliver msngr message = atomically $ writeTQueue (messengerOut msngr) message
 
 udpReceiveSocketMessages :: N.Socket -> Address -> Mailbox -> IO ()
-udpReceiveSocketMessages sock addr mailbox = catch (do
+udpReceiveSocketMessages sock addr mailbox = catchExceptions (do
     infoM _log $ "Waiting to receive via UDP on " ++ (show addr)
     maybeMsg <- udpReceiveSocketMessage
     infoM _log $ "Received message via UDP on " ++ (show addr)
@@ -184,12 +185,10 @@ udpReceiveSocketMessages sock addr mailbox = catch (do
             udpReceiveSocketMessages sock addr mailbox) (\e -> do 
                 warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
     where
-        udpReceiveSocketMessage = catch (do
+        udpReceiveSocketMessage = do
             maybeMsg <- udpRecvFrom sock 512
             infoM _log $ "Received message"
-            return maybeMsg) (\e -> do
-                warningM _log $ "Receive error: " ++ (show (e :: SomeException))
-                throw e)
+            return maybeMsg
 
 udpRecvFrom :: N.Socket -> Int -> IO (Maybe B.ByteString)
 udpRecvFrom sock count = do

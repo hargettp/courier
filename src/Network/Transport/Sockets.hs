@@ -41,6 +41,7 @@ module Network.Transport.Sockets (
 -- local imports
 
 import Network.Transport
+import Network.Transport.Internal
 
 -- external imports
 import Control.Concurrent.Async
@@ -145,7 +146,7 @@ newMessenger conn inc = do
 dispatcher :: TVar (M.Map Name Mailbox) -> Mailbox -> IO ()
 dispatcher bindings mbox = dispatchMessages
   where
-    dispatchMessages = catch (do
+    dispatchMessages = catchExceptions (do
                                  infoM _log $ "Dispatching messages"
                                  env <- atomically $ readTQueue mbox
                                  dispatchMessage env
@@ -174,7 +175,7 @@ sender conn mailbox = sendMessages
   where
     sendMessages = do
       reconnect
-      catch (do
+      catchExceptions (do
                 infoM _log $ "Waiting to send to " ++ (show $ connAddress conn)
                 msg <- atomically $ readTQueue mailbox
                 infoM _log $ "Sending message to " ++ (show $ connAddress conn)
@@ -182,10 +183,6 @@ sender conn mailbox = sendMessages
                 case connected of
                   Just socket -> do
                       (connSend conn) socket msg
-                    -- (connSend conn) socket $ encode (B.length msg)
-                    -- infoM _log $ "Length sent"
-                    -- (connSend conn) socket msg
-                    -- infoM _log $ "Message sent to" ++ (show $ connAddress conn)
                   Nothing -> return ()
             )
             (\e -> do
@@ -215,7 +212,7 @@ receiver conn mailbox  = do
     receiveSocketMessages socket (connAddress conn) mailbox
 
 receiveSocketMessages :: Socket -> Address -> Mailbox -> IO ()
-receiveSocketMessages sock addr mailbox = catch (do
+receiveSocketMessages sock addr mailbox = catchExceptions (do
       infoM _log $ "Waiting to receive on " ++ (show addr)
       maybeMsg <- receiveSocketMessage sock
       infoM _log $ "Received message on " ++ (show addr)
@@ -229,18 +226,16 @@ receiveSocketMessages sock addr mailbox = catch (do
                            warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
 
 receiveSocketMessage :: Socket -> IO (Maybe Message)
-receiveSocketMessage socket = catch (do
+receiveSocketMessage socket = do
   maybeLen <- recv socket 8 -- TODO must figure out what defines length of an integer in bytes 
   case maybeLen of
     Nothing -> do
-      warningM _log $ "No length received"
+      infoM _log $ "No length received"
       return Nothing
     Just len -> do 
       maybeMsg <- recv socket $ msgLength (decode len)
       infoM _log $ "Received message"
-      return maybeMsg) (\e -> do 
-                  warningM _log $ "Receive error: " ++ (show (e :: SomeException))
-                  throw e)
+      return maybeMsg
   where
     msgLength (Right size) = size
     msgLength (Left err) = error err
