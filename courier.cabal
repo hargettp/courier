@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                courier
-version:             0.1.0.7
+version:             0.1.0.8
 synopsis:           A message-passing library for simplifying network applications
 description:         Inspired by Erlang's simple message-passing facilities, courier provides roughly similar 
                      capabilities. Applications simply create one or more endpoints, 
@@ -23,7 +23,7 @@ license:             MIT
 license-file:        LICENSE
 author:              Phil Hargett
 maintainer:          phil@haphazardhouse.net
-copyright:           Copyright (c) 2013 Phil Hargett
+copyright:           Copyright (c) 2013-14 Phil Hargett
 
 category:            Network,Distributed Computing,Message-Oriented
 build-type:          Simple
