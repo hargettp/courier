@@ -104,6 +104,7 @@ udpBind transport inc name = do
         bindingName = name,
         unbind = do
             cancel rcvr
+            infoM _log $ "Closing UDP socket bound on " ++ (show port)
             N.sClose sock
         }
 
@@ -120,8 +121,12 @@ newUDPConnection address = do
         sendAllTo s bs addr
         infoM _log $ "Sent via UDP to " ++ (show addr)),
     connReceive = udpRecvFrom,
-    -- TODO this is where leak bound UDP sockets
-    connClose = return ()
+    connClose = do
+        maybeSocket <- atomically $ tryTakeTMVar sock
+        case maybeSocket of
+            Just s -> N.sClose s
+            Nothing -> return ()
+        return ()
     }
 
 newUDPMessenger :: Connection -> Mailbox -> IO Messenger
