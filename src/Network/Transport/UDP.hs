@@ -15,6 +15,14 @@
 -- Each UDP transport manages socket bindings on behalf of
 -- 'Endpoint's, dynamically opening / closing new sockets as needed to deliver
 -- messages to other 'Endpoint's using UDP transports.
+--
+-- There is no reuse of sockets on the sending side, so while messages will be 
+-- received on a known bound port, the remote sending port will vary arbitrarily.
+-- 
+-- This transport only reads at most 512 bytes from incoming packets: constraining
+-- the packet size avoids fragmentation.  Applications using this transport should take
+-- responsibility for fragmentation, reassembly, retransmission of lost packets,
+-- and congestion control.
 -----------------------------------------------------------------------------
 
 module Network.Transport.UDP (

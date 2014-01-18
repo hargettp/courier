@@ -3,12 +3,19 @@
 
 name:                courier
 version:             0.1.0.6
-synopsis:            A message-passing library, intended for simplifying network applications
+synopsis:           A message-passing library for simplifying network applications
 description:         Inspired by Erlang's simple message-passing facilities, courier provides roughly similar 
                      capabilities. Applications simply create one or more endpoints, 
                      bind each to a transport using a given name, then can freely 
                      send / receive messages to other endpoints just by referencing the name each endpoint 
                      bound to its transport.
+                     .
+                     Note that while the simplicity is inspired by Erlang, the actual semantics of a receive 
+                     operation are not: receive just returns the next message delivered to an endpoint by a 
+                     transport. There is no attempt to perform pattern-matching on a range of alternatives, 
+                     and thus enabling out-of-order receipt. Consequently, all messages delivered to an endpoint 
+                     will always be received in the order delivered. In this sense, endpoints are more akin to 
+                     channels in Go but without the strict typing.
                      
 homepage:          http://github.com/hargettp/courier
 license:             MIT
@@ -32,12 +39,12 @@ library
                   Network.Endpoints
                   Network.Transport
                   Network.Transport.Memory
-                  Network.Transport.Sockets
                   Network.Transport.TCP
                   Network.Transport.UDP
 
   ghc-options: -Wall
   other-modules:
+                  Network.Transport.Sockets
                   Network.Transport.Internal
   build-depends:       base >=4 && <5,
                        async,
