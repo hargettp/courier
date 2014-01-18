@@ -52,22 +52,6 @@ _log = "transport.udp"
 udpScheme :: Scheme
 udpScheme = "udp"
 
-newUDPConnection :: Address -> IO Connection
-newUDPConnection address = do
-  sock <- atomically newEmptyTMVar
-  return Connection {
-    connAddress = address,
-    connSocket = sock,
-    connConnect = N.socket N.AF_INET N.Datagram N.defaultProtocol,
-    connSend = (\s bs -> do
-        addr <- lookupAddress $ parseSocketAddress address
-        infoM _log $ "Sending via UDP to " ++ (show addr)
-        sendAllTo s bs addr
-        infoM _log $ "Sent via UDP to " ++ (show addr)),
-    connReceive = udpRecvFrom,
-    connClose = return ()
-    }
-
 newUDPTransport :: Resolver -> IO Transport
 newUDPTransport resolver = do
   messengers <- atomically $ newTVar M.empty
@@ -122,6 +106,23 @@ udpBind transport inc name = do
             cancel rcvr
             N.sClose sock
         }
+
+newUDPConnection :: Address -> IO Connection
+newUDPConnection address = do
+  sock <- atomically newEmptyTMVar
+  return Connection {
+    connAddress = address,
+    connSocket = sock,
+    connConnect = N.socket N.AF_INET N.Datagram N.defaultProtocol,
+    connSend = (\s bs -> do
+        addr <- lookupAddress $ parseSocketAddress address
+        infoM _log $ "Sending via UDP to " ++ (show addr)
+        sendAllTo s bs addr
+        infoM _log $ "Sent via UDP to " ++ (show addr)),
+    connReceive = udpRecvFrom,
+    -- TODO this is where leak bound UDP sockets
+    connClose = return ()
+    }
 
 newUDPMessenger :: Connection -> Mailbox -> IO Messenger
 newUDPMessenger conn mailbox = do

@@ -50,25 +50,8 @@ import System.Log.Logger
 _log :: String
 _log = "transport.tcp"
 
-newTCPConnection :: Address -> IO Connection
-newTCPConnection address = do
-  sock <- atomically $ newEmptyTMVar
-  let (host,port) = parseSocketAddress address
-  return Connection {
-    connAddress = address,
-    connSocket = sock,
-    connConnect = do
-        (s,_) <- connectSock host port
-        return s,
-    -- connSend = send,
-    connSend = tcpSend address,
-    connReceive = recv,
-    connClose = do
-        open <- atomically $ tryTakeTMVar sock
-        case open of
-            Just socket -> sClose socket
-            Nothing -> return ()
-    }
+tcpScheme :: Scheme
+tcpScheme = "tcp"
 
 {-|
 Create a new 'Transport' suitable for sending messages over TCP/IP.  There can
@@ -98,11 +81,6 @@ newTCPTransport resolver = do
       sendTo = socketSendTo transport,
       shutdown = tcpShutdown transport
       }
-
---------------------------------------------------------------------------------
-
-tcpScheme :: Scheme
-tcpScheme = "tcp"
 
 tcpHandles :: SocketTransport -> Name -> IO Bool
 tcpHandles transport name = do 
@@ -170,6 +148,26 @@ tcpBind transport inc name = do
     tcpUnbind listener address = do 
       infoM _log $ "Unbinding from port " ++ (show address)
       cancel listener
+
+newTCPConnection :: Address -> IO Connection
+newTCPConnection address = do
+  sock <- atomically $ newEmptyTMVar
+  let (host,port) = parseSocketAddress address
+  return Connection {
+    connAddress = address,
+    connSocket = sock,
+    connConnect = do
+        (s,_) <- connectSock host port
+        return s,
+    -- connSend = send,
+    connSend = tcpSend address,
+    connReceive = recv,
+    connClose = do
+        open <- atomically $ tryTakeTMVar sock
+        case open of
+            Just socket -> sClose socket
+            Nothing -> return ()
+    }
 
 newTCPMessenger :: Bindings -> Resolver -> Connection -> Mailbox -> IO Messenger
 newTCPMessenger bindings resolver conn mailbox = do
