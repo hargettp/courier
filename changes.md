@@ -1,3 +1,11 @@
+0.1.0.8
+
+ * TBD
+ 
+0.1.0.7
+
+  * First inclusion of changelog in package
+  
 0.1.0.6
 
  * Added simple implementation of transport for UDP
