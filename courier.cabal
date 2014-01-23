@@ -14,7 +14,7 @@ description:         Inspired by Erlang's simple message-passing facilities, cou
                      selective message reception to process the first message arriving at an endpoint
                      that also matches a provided selection function. Through selective message reception,
                      applications may approximate the style of an Erlang application, and enjoy better composability
-                     of message reception with multiple independent dispatch routines.
+                     of message reception with multiple independent dispatch routines or message pumps.
                      
 extra-source-files:  changes.md
 homepage:          http://github.com/hargettp/courier

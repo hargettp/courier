@@ -1,6 +1,12 @@
 0.1.0.8
 
- * TBD
+ * Enabled selective out of order mesage reception, by using an extension of STM's TQueues that 
+   extracts the next message from the queue that matches a supplied selection function. With
+   selective out of order message reception, endpoints can approximate the Erlang-style of
+   message delivery and composing applications that must handle multiple message types becomes
+   simpler. If an application needs to handle multiple message types, it can choose to run
+   separate separate message pumps concurrently, each handling different types of messages.
+   Each message pump can operate independently of one another.
  
 0.1.0.7
 
