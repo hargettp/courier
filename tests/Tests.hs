@@ -15,6 +15,7 @@ import Test.HUnit
 import Test.Framework.Providers.HUnit
 
 -- Test modules
+import qualified TestMailbox as MB
 import qualified TestMemory as M
 import qualified TestTCP as T
 import qualified TestUDP as U
@@ -44,6 +45,7 @@ tests =
     testCase "hunit" (assertBool "HUnit assertion of truth is false" True),
     testCase "endpoints" testEndpoint
   ]
+  ++ MB.tests
   ++ M.tests
   ++ T.tests
   ++ U.tests
