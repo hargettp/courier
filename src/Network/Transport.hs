@@ -20,21 +20,22 @@ module Network.Transport (
   Address,
   Binding(..),
   Envelope(..),
-  Mailbox,
-  newMailbox,
   Message,
   Name,
   Resolver,
   resolve,
   resolverFromList,
   Scheme,
-  Transport(..),  
+  Transport(..),
+
+  module Control.Concurrent.Mailbox
+  
   ) where
 
 -- local imports
+import Control.Concurrent.Mailbox
 
 -- external imports
-import Control.Concurrent.STM
 
 import Data.ByteString as B
 import Data.Serialize
@@ -72,13 +73,6 @@ A 'Mailbox' is a place where transports can put messages for 'Network.Endpoint.E
 to receive.  Typically 'Network.Endpoint.Endpoint's will use the same 'Mailbox' when
 binding or connecting with a 'Transport'.
 -}
-type Mailbox = TQueue Message
-
-{-|
-Create a new mailbox.
--}
-newMailbox :: IO Mailbox
-newMailbox = atomically $ newTQueue
 
 {-|
 An address is a logical identifier suitable for establishing a connection to
@@ -108,7 +102,7 @@ between 'Endpoint's.
 data Transport = Transport {
   scheme :: String,
   handles :: Name -> IO Bool,
-  bind :: Mailbox -> Name -> IO (Either String Binding),
+  bind :: Mailbox Message -> Name -> IO (Either String Binding),
   sendTo :: Name -> Message -> IO (),
   shutdown :: IO ()
   }

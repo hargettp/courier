@@ -38,7 +38,7 @@ memoryScheme :: Scheme
 memoryScheme = "mem"
 
 data MemoryTransport = MemoryTransport {
-  boundMailboxes :: TVar (M.Map Name Mailbox)
+  boundMailboxes :: TVar (M.Map Name (Mailbox Message))
   }
                        
 {-|
@@ -58,7 +58,7 @@ newMemoryTransport = do
       shutdown = return ()
       }
 
-memoryBind :: MemoryTransport -> Mailbox -> Name -> IO (Either String Binding)
+memoryBind :: MemoryTransport -> Mailbox Message -> Name -> IO (Either String Binding)
 memoryBind transport mailbox name = do
   atomically $ modifyTVar (boundMailboxes transport) 
     (\mailboxes -> M.insert name mailbox mailboxes)
@@ -75,7 +75,7 @@ memorySendTo :: MemoryTransport -> Name -> Message -> IO ()
 memorySendTo transport name msg = do
   mailboxes <- atomically $ readTVar $ boundMailboxes transport
   case M.lookup name mailboxes of
-    Just mailbox -> atomically $ writeTQueue mailbox msg
+    Just mailbox -> atomically $ writeMailbox mailbox msg
     Nothing -> return () -- error $ "No mailbox for " ++ name
 
 memoryUnbind :: MemoryTransport -> Name -> IO ()

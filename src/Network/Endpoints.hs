@@ -34,9 +34,15 @@ module Network.Endpoints (
   sendMessage,
   sendMessage_,
   broadcastMessage,
-  broadcastMessage_,                 
+  broadcastMessage_,
   receiveMessage,
   receiveMessageTimeout,
+
+  -- * Selective message reception
+  selectMessage,
+  selectMessageTimeout,
+  dispatchMessage,
+  dispatchMessageTimeout,
   
   -- * Transports
   {-|
@@ -97,7 +103,7 @@ Endpoints are a locus of communication, used for sending and receive messages.
 data Endpoint = Endpoint {
   endpointTransports :: TVar [Transport],
   endpointBindings :: TVar (M.Map Name Binding),
-  endpointMailbox :: Mailbox
+  endpointMailbox :: Mailbox Message
   }
 
 {-|
@@ -107,7 +113,7 @@ newEndpoint :: [Transport] -> IO Endpoint
 newEndpoint trans = do
   transports <- atomically $ newTVar trans
   bindings <- atomically $ newTVar M.empty
-  mailbox <- atomically $ newTQueue
+  mailbox <- atomically $ newMailbox
   return Endpoint {
     endpointTransports = transports,
     endpointBindings = bindings,
@@ -195,7 +201,7 @@ broadcastMessage_ endpoint names msg = do
 Receive the next 'Message' sent to the 'Endpoint', blocking until a message is available.
 -}
 receiveMessage :: Endpoint -> IO Message
-receiveMessage endpoint = atomically $ readTQueue $ endpointMailbox endpoint
+receiveMessage endpoint = atomically $ readMailbox $ endpointMailbox endpoint
 
 {-|
 Wait for a message to be received within the timeout, blocking until either a message
@@ -208,6 +214,47 @@ receiveMessageTimeout endpoint delay = do
   case resultOrTimeout of
     Left result -> return $ Just result
     Right () -> return Nothing
+
+{-|
+Select the next available message in the 'Endpoint' 'Mailbox' matching
+the supplied test function, or blocking until one is available. This function
+differs from 'receiveMessage' in that it supports out of order message reception.
+-}
+selectMessage :: Endpoint -> (Message -> Maybe v) -> IO v
+selectMessage endpoint testFn = do
+    msg <- atomically $ selectMailbox (endpointMailbox endpoint) testFn
+    return msg
+
+{-|
+Wait for a message to be selected within the timeout, blocking until either a message
+is available or the timeout has occurred.  If a message was available, returns @Just message@,
+but returns @Nothing@ if no message available before the timeout occurred. Like
+'selectMessage', this function enables out of order message reception.
+-}
+selectMessageTimeout :: Endpoint -> Int -> (Message -> Maybe v) -> IO (Maybe v)
+selectMessageTimeout endpoint delay testFn = do
+  resultOrTimeout <- race (selectMessage endpoint testFn) (threadDelay delay)
+  case resultOrTimeout of
+    Left result -> return $ Just result
+    Right () -> return Nothing
+
+{-|
+Dispatch the next available message in the 'Endpoint' 'Mailbox' matching
+the supplied test function, or blocking until one is available. Once a
+matching message is found, handle the message with the supplied handler
+and return any result obtained. This function differs from 'receiveMessage'
+in that it supports out of order message reception.
+-}
+dispatchMessage :: Endpoint -> (Message -> Maybe v) -> (v -> IO r) -> IO r
+dispatchMessage endpoint = handleMailbox (endpointMailbox endpoint)
+
+dispatchMessageTimeout :: Endpoint -> Int -> (Message -> Maybe v) -> (v -> IO r) -> IO (Maybe r)
+dispatchMessageTimeout endpoint delay testFn handleFn = do
+  resultOrTimeout <- race (dispatchMessage endpoint testFn handleFn) (threadDelay delay)
+  case resultOrTimeout of
+    Left result -> return $ Just result
+    Right () -> return Nothing
+    
 
 findTransport :: Endpoint -> Name -> IO (Maybe Transport)
 findTransport endpoint name = do

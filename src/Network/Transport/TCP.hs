@@ -63,7 +63,7 @@ newTCPTransport :: Resolver -> IO Transport
 newTCPTransport resolver = do
   messengers <- atomically $ newTVar M.empty
   bindings <- atomically $ newTVar M.empty
-  inbound <- newMailbox
+  inbound <- atomically $ newMailbox
   dispatch <- async $ dispatcher bindings inbound
   let transport = SocketTransport {
         socketMessengers = messengers,
@@ -90,7 +90,7 @@ tcpHandles transport name = do
     isJust (Just _) = True
     isJust _ = False
 
-tcpBind :: SocketTransport -> Mailbox -> Name -> IO (Either String Binding)
+tcpBind :: SocketTransport -> Mailbox Message -> Name -> IO (Either String Binding)
 tcpBind transport inc name = do
   atomically $ modifyTVar (socketBindings transport) $ \bindings ->
     M.insert name inc bindings
@@ -169,7 +169,7 @@ newTCPConnection address = do
             Nothing -> return ()
     }
 
-newTCPMessenger :: Bindings -> Resolver -> Connection -> Mailbox -> IO Messenger
+newTCPMessenger :: Bindings -> Resolver -> Connection -> Mailbox Message -> IO Messenger
 newTCPMessenger bindings resolver conn mailbox = do
     msngr <- newMessenger conn mailbox
     identifyAll msngr

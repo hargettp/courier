@@ -64,7 +64,7 @@ newUDPTransport :: Resolver -> IO Transport
 newUDPTransport resolver = do
   messengers <- atomically $ newTVar M.empty
   bindings <- atomically $ newTVar M.empty
-  inbound <- newMailbox
+  inbound <- atomically $ newMailbox
   dispatch <- async $ dispatcher bindings inbound
   let transport = SocketTransport {
         socketMessengers = messengers,
@@ -91,7 +91,7 @@ udpHandles transport name = do
     isJust (Just _) = True
     isJust _ = False
 
-udpBind :: SocketTransport -> Mailbox -> Name -> IO (Either String Binding)
+udpBind :: SocketTransport -> Mailbox Message -> Name -> IO (Either String Binding)
 udpBind transport inc name = do
     atomically $ modifyTVar (socketBindings transport) $ \bindings ->
         M.insert name inc bindings
@@ -137,12 +137,12 @@ newUDPConnection address = do
         return ()
     }
 
-newUDPMessenger :: Connection -> Mailbox -> IO Messenger
+newUDPMessenger :: Connection -> Mailbox Message -> IO Messenger
 newUDPMessenger conn mailbox = do
     msngr <- newMessenger conn mailbox
     return msngr
 
-udpReceiveSocketMessages :: N.Socket -> Address -> Mailbox -> IO ()
+udpReceiveSocketMessages :: N.Socket -> Address -> Mailbox Message -> IO ()
 udpReceiveSocketMessages sock addr mailbox = catchExceptions (do
     infoM _log $ "Waiting to receive via UDP on " ++ (show addr)
     maybeMsg <- udpReceiveSocketMessage
@@ -152,7 +152,7 @@ udpReceiveSocketMessages sock addr mailbox = catchExceptions (do
             N.sClose sock
             return ()
         Just msg -> do
-            atomically $ writeTQueue mailbox msg
+            atomically $ writeMailbox mailbox msg
             udpReceiveSocketMessages sock addr mailbox) (\e -> do 
                 warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
     where

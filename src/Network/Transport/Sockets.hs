@@ -75,14 +75,14 @@ import System.Log.Logger
 _log :: String
 _log = "transport.sockets"
 
-type Bindings = TVar (M.Map Name Mailbox)
+type Bindings = TVar (M.Map Name (Mailbox Message))
 
 data SocketTransport = SocketTransport {
   socketMessengers :: TVar (M.Map Address Messenger),
   socketBindings :: Bindings,
   socketConnection :: Address -> IO Connection,
-  socketMessenger :: Connection -> Mailbox -> IO Messenger,
-  socketInbound :: Mailbox,
+  socketMessenger :: Connection -> Mailbox Message -> IO Messenger,
+  socketInbound :: Mailbox Message,
   socketDispatchers :: S.Set (Async ()),
   socketResolver :: Resolver
 
@@ -109,7 +109,7 @@ happens asynchronously, allowing applications to move on without regard for
 when any send / receive action actually completes.
 -}
 data Messenger = Messenger {
-  messengerOut :: Mailbox,
+  messengerOut :: Mailbox Message,
   messengerAddress :: Address,
   messengerSender :: Async (),
   messengerReceiver :: Async (),
@@ -158,9 +158,9 @@ type SocketSend = Socket -> B.ByteString -> IO ()
 instance Show Messenger where
   show msngr = "Messenger(" ++ (show $ messengerAddress msngr) ++ ")"
 
-newMessenger :: Connection -> Mailbox -> IO Messenger
+newMessenger :: Connection -> Mailbox Message -> IO Messenger
 newMessenger conn inc = do
-  out <- newMailbox
+  out <- atomically $ newMailbox
   sndr <- async $ sender conn out
   rcvr <- async $ receiver conn inc
   return Messenger {
@@ -180,14 +180,14 @@ addMessenger transport address msngr = do
   infoM _log $ "Added messenger to " ++ (show address) ++ "; messengers are " ++ (show msngrs)
 
 deliver :: Messenger -> Message -> IO ()
-deliver msngr message = atomically $ writeTQueue (messengerOut msngr) message
+deliver msngr message = atomically $ writeMailbox (messengerOut msngr) message
     
-dispatcher :: TVar (M.Map Name Mailbox) -> Mailbox -> IO ()
+dispatcher :: TVar (M.Map Name (Mailbox Message)) -> Mailbox Message -> IO ()
 dispatcher bindings mbox = dispatchMessages
   where
     dispatchMessages = catchExceptions (do
                                  infoM _log $ "Dispatching messages"
-                                 env <- atomically $ readTQueue mbox
+                                 env <- atomically $ readMailbox mbox
                                  dispatchMessage env
                                  dispatchMessages)
                        (\e -> do
@@ -206,17 +206,17 @@ dispatcher bindings mbox = dispatchMessages
             case maybeDest of
               Nothing -> return ()
               Just dest -> do 
-                writeTQueue dest msg
+                writeMailbox dest msg
                 return ()
 
-sender :: Connection -> Mailbox -> IO ()
+sender :: Connection -> Mailbox Message -> IO ()
 sender conn mailbox = sendMessages
   where
     sendMessages = do
       reconnect
       catchExceptions (do
                 infoM _log $ "Waiting to send to " ++ (show $ connAddress conn)
-                msg <- atomically $ readTQueue mailbox
+                msg <- atomically $ readMailbox mailbox
                 infoM _log $ "Sending message to " ++ (show $ connAddress conn)
                 connected <- atomically $ tryReadTMVar $ connSocket conn
                 case connected of
@@ -260,7 +260,7 @@ socketSendTo transport name msg = do
       case found of
         Nothing -> return False
         Just mbox -> do
-          atomically $ writeTQueue mbox msg
+          atomically $ writeMailbox mbox msg
           return True
     remote = do
       Just address <- resolve (socketResolver transport) name
@@ -284,12 +284,12 @@ socketSendTo transport name msg = do
           return ()
         Just msngr -> deliver msngr env
 
-receiver :: Connection -> Mailbox -> IO ()
+receiver :: Connection -> Mailbox Message -> IO ()
 receiver conn mailbox  = do 
     socket <- atomically $ readTMVar $ connSocket conn
     receiveSocketMessages socket (connAddress conn) mailbox
 
-receiveSocketMessages :: Socket -> Address -> Mailbox -> IO ()
+receiveSocketMessages :: Socket -> Address -> Mailbox Message -> IO ()
 receiveSocketMessages sock addr mailbox = catchExceptions (do
       infoM _log $ "Waiting to receive on " ++ (show addr)
       maybeMsg <- receiveSocketMessage sock
@@ -299,7 +299,7 @@ receiveSocketMessages sock addr mailbox = catchExceptions (do
           sClose sock
           return ()
         Just msg -> do
-          atomically $ writeTQueue mailbox msg
+          atomically $ writeMailbox mailbox msg
           receiveSocketMessages sock addr mailbox) (\e -> do 
                            warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
 

@@ -10,12 +10,11 @@ description:         Inspired by Erlang's simple message-passing facilities, cou
                      send / receive messages to other endpoints just by referencing the name each endpoint 
                      bound to its transport.
                      .
-                     Note that while the simplicity is inspired by Erlang, the actual semantics of a receive 
-                     operation are not: receive just returns the next message delivered to an endpoint by a 
-                     transport. There is no attempt to perform pattern-matching on a range of alternatives, 
-                     and thus enabling out-of-order receipt. Consequently, all messages delivered to an endpoint 
-                     will always be received in the order delivered. In this sense, endpoints are more akin to 
-                     channels in Go but without the strict typing.
+                     Applications may process messages in the order received at an endpoint, or use
+                     selective message reception to process the first message arriving at an endpoint
+                     that also matches a provided selection function. Through selective message reception,
+                     applications may approximate the style of an Erlang application, and enjoy better composability
+                     of message reception with multiple independent dispatch routines.
                      
 extra-source-files:  changes.md
 homepage:          http://github.com/hargettp/courier
@@ -42,6 +41,7 @@ library
                   Network.Transport.Memory
                   Network.Transport.TCP
                   Network.Transport.UDP
+                  Control.Concurrent.Mailbox
 
   ghc-options: -Wall
   other-modules:
@@ -56,7 +56,8 @@ library
                        network,
                        network-simple,
                        stm,
-                       text
+                       text,
+                       uid
 
 Test-Suite test-courier
     type: exitcode-stdio-1.0

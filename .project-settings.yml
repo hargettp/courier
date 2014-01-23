@@ -1,6 +1,9 @@
-module-template: ! 'module MODULE_NAME where
-
-'
+module-template: ! "-----------------------------------------------------------------------------\n--
+  |\n-- Module      :  MODULE_NAME\n-- Copyright   :  (c) Phil Hargett 2014\n-- License
+  \    :  MIT (see LICENSE file)\n-- \n-- Maintainer  :  phil@haphazardhouse.net\n--
+  Stability   :  experimental\n-- Portability :  non-portable (requires STM)\n--\n--
+  (..... module description .....)\n--\n-----------------------------------------------------------------------------\n\nmodule
+  MODULE_NAME (\n) where\n\n-- local imports\n\n-- external imports\n\n--------------------------------------------------------------------------------\n--------------------------------------------------------------------------------\n"
 extensions: {}
 environment: ghc-7.8-unstable
 cabal-file: project.cabal
@@ -10,9 +13,7 @@ extra-packages: ! 'Hackage: hslogger 1.2.3
 
   Hackage: exceptions 0.3.2
 
-  Hackage: network-simple 0.3.0
-
-'
+  Hackage: network-simple 0.3.0'
 ghc-args:
 - -Wall
 excluded-modules:
