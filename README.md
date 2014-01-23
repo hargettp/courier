@@ -21,11 +21,11 @@ The semantics of courier's use are simple:
  * Sending messages is non-blocking and provides no feedback or guarantee regarding delivery; specific transports may, 
    however, provide out of band feedback regarding delivery
  * Receiving messages is by default blocking, although a blocking call with a timeout is available
-  
-Note that while the simplicity is inspired by Erlang, the actual semantics of a receive operation are not: receive just returns 
-the next message delivered to an endpoint by a transport.  There is no attempt to perform pattern-matching on a range
-of alternatives, and thus enabling out-of-order receipt.  Consequently, all messages delivered to an endpoint will always
-be received in the order delivered. In this sense, endpoints are more akin to channels in Go but without the strict typing.
+
+Both in-delivery-order reception and selective out of order reception are supported: applications designers
+are free to choose which style makes sense for a specific application.  The use of the latter technique
+approximates an Erlang-style coding model, as messages selected witha supplied function are received before
+other non-selected messages that are ahead of them in the queue.
 
 A sample of use follows:
 
