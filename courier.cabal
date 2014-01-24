@@ -72,10 +72,12 @@ Test-Suite test-courier
         test-framework-hunit,
         -- Cabal,
         -- 3rd party modules
+        async,
         cereal,
         directory,
         hslogger,
         network-simple,
+        stm,
         -- this project's modules
         courier
 
