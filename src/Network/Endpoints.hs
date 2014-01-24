@@ -37,6 +37,7 @@ module Network.Endpoints (
   broadcastMessage_,
   receiveMessage,
   receiveMessageTimeout,
+  postMessage,
 
   -- * Selective message reception
   selectMessage,
@@ -216,6 +217,15 @@ receiveMessageTimeout endpoint delay = do
     Right () -> return Nothing
 
 {-|
+Posts a 'Message' directly to an 'Endpoint', without use of a transport. This
+may be useful for applications that prefer to use the 'Endpoint''s 'Mailbox'
+as a general queue of ordered messages.
+-}
+postMessage :: Endpoint -> Message -> IO ()
+postMessage endpoint message = do
+    atomically $ writeMailbox (endpointMailbox endpoint) message
+
+{-|
 Select the next available message in the 'Endpoint' 'Mailbox' matching
 the supplied test function, or blocking until one is available. This function
 differs from 'receiveMessage' in that it supports out of order message reception.
@@ -254,7 +264,6 @@ dispatchMessageTimeout endpoint delay testFn handleFn = do
   case resultOrTimeout of
     Left result -> return $ Just result
     Right () -> return Nothing
-    
 
 findTransport :: Endpoint -> Name -> IO (Maybe Transport)
 findTransport endpoint name = do
