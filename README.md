@@ -22,7 +22,7 @@ The semantics of courier's use are simple:
    however, provide out of band feedback regarding delivery
  * Receiving messages is by default blocking, although a blocking call with a timeout is available
 
-Both in-delivery-order reception and selective out of order reception are supported: applications designers
+Both in-delivery-order reception and selective out-of-order reception are supported: applications designers
 are free to choose which style makes sense for a specific application.  The use of the latter technique
 approximates an Erlang-style coding model, as messages selected witha supplied function are received before
 other non-selected messages that are ahead of them in the queue.
