@@ -98,7 +98,7 @@ udpBind transport inc name = do
     Just address <- resolve (socketResolver transport) name
     let (_,port) = parseSocketAddress address
     addrinfos <- N.getAddrInfo
-                    (Just (N.defaultHints {N.addrFlags = [N.AI_PASSIVE]}))
+                    (Just (N.defaultHints {N.addrFlags = [N.AI_PASSIVE,N.AI_NUMERICSERV]}))
                     Nothing (Just port)
     let serveraddr = head addrinfos
     sock <-  N.socket (N.addrFamily serveraddr) N.Datagram N.defaultProtocol

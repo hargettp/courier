@@ -64,8 +64,8 @@ import qualified Data.Text as T
 
 import GHC.Generics
 
-import Network.Simple.TCP (recv)
 import Network.Socket hiding (recv,socket)
+import qualified Network.Socket.ByteString as NSB
 
 import System.Log.Logger
 
@@ -317,20 +317,27 @@ receiveSocketMessages sock done addr mailbox = do
                 then return ()
                 else warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
 
-receiveSocketMessage :: Socket -> IO (Maybe Message)
+receiveSocketMessage :: Socket -> IO (Maybe B.ByteString)
 receiveSocketMessage socket = do
-  maybeLen <- recv socket 8 -- TODO must figure out what defines length of an integer in bytes 
+  maybeLen <- receiveSocketBytes socket 8 -- TODO must figure out what defines length of an integer in bytes 
   case maybeLen of
     Nothing -> do
       infoM _log $ "No length received"
       return Nothing
     Just len -> do 
-      maybeMsg <- recv socket $ msgLength (decode len)
+      maybeMsg <- receiveSocketBytes socket $ msgLength (decode len)
       infoM _log $ "Received message"
       return maybeMsg
   where
     msgLength (Right size) = size
     msgLength (Left err) = error err
+
+receiveSocketBytes :: Socket -> Int -> IO (Maybe B.ByteString)
+receiveSocketBytes sock maxBytes = do
+    bs <- NSB.recv sock maxBytes
+    if B.null bs
+        then return Nothing
+        else return $ Just bs
 
 closeMessenger :: Messenger -> IO ()
 closeMessenger msngr = do

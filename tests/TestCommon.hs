@@ -33,6 +33,9 @@ import Test.HUnit
 testDelay :: Int
 testDelay = 1 * 1000000
 
+pause :: IO ()
+pause = threadDelay testDelay
+
 {-
 Common tests--just supply the transport factory and 2 addresses
 -}
@@ -79,7 +82,7 @@ endpointSendReceive _log newTransport address1 address2 = do
       endpoint2 <- newEndpoint [transport2]
       Right () <- bindEndpoint endpoint1 name1
       Right () <- bindEndpoint endpoint2 name2
-      threadDelay testDelay
+      pause
 
       verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"
 
@@ -104,7 +107,7 @@ endpointDoubleSendReceive _log newTransport address1 address2 = do
       Right () <- bindEndpoint endpoint1 name1
       Right () <- bindEndpoint endpoint2 name2
       Right () <- bindEndpoint endpoint3 name3
-      threadDelay testDelay
+      pause
 
       verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"
       verifiedSend _log endpoint3 endpoint2 name3 name2 "ciao!"
@@ -130,20 +133,20 @@ endpointSendReceiveReply _log newTransport address1 address2 = do
       endpoint2 <- newEndpoint [transport2]
       Right () <- bindEndpoint endpoint1 name1
       Right () <- bindEndpoint endpoint2 name2
-      threadDelay testDelay
-              
+      pause
+
       verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"
       verifiedSend _log endpoint2 endpoint1 name2 name1 "hi!"
-              
+
       Right () <- unbindEndpoint endpoint1 name1
       Right () <- unbindEndpoint endpoint2 name2
-                
+
       return ()
   infoM _log "Finished send-receive-reply test"
 
 endpointLocalSendReceiveReply :: String -> (Resolver -> IO Transport) -> Address -> Address -> Assertion
 endpointLocalSendReceiveReply _log newTransport address1 _ = do
-  infoM _log "Starting local-send-receive-reply test"    
+  infoM _log "Starting local-send-receive-reply test"
   let name1 = "endpoint1"
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),
@@ -155,14 +158,14 @@ endpointLocalSendReceiveReply _log newTransport address1 _ = do
         endpoint2 <- newEndpoint [transport1]
         Right () <- bindEndpoint endpoint1 name1
         Right () <- bindEndpoint endpoint2 name2
-        threadDelay testDelay
-              
+        pause
+
         verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"
         verifiedSend _log endpoint2 endpoint1 name2 name1 "hi!"
-        
+
         Right () <- unbindEndpoint endpoint1 name1
         Right () <- unbindEndpoint endpoint2 name2
-                
+
         return ())
   infoM _log "Finished local-send-receive-reply test"
 
@@ -173,12 +176,12 @@ endpointMultipleSendReceiveReply _log newTransport address1 address2 = do
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),
                                    (name2,address2)]
-  bracketTest _log resolver newTransport $ \transport1 transport2 -> do 
+  bracketTest _log resolver newTransport $ \transport1 transport2 -> do
       endpoint1 <- newEndpoint [transport1]
       endpoint2 <- newEndpoint [transport2]
       Right () <- bindEndpoint endpoint1 name1
       Right () <- bindEndpoint endpoint2 name2
-      threadDelay testDelay
+      pause
 
       roundtrip endpoint1 endpoint2 name1 name2
       roundtrip endpoint2 endpoint1 name2 name1
@@ -192,7 +195,7 @@ endpointMultipleSendReceiveReply _log newTransport address1 address2 = do
   infoM _log "Finished multiple-send-receive-reply test"
     where
       roundtrip endpoint1 endpoint2 name1 name2 = do
-        verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"                
+        verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"
         verifiedSend _log endpoint2 endpoint1 name2 name1 "hi!"
 
 -- helpers
