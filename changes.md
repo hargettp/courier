@@ -9,6 +9,8 @@
    message types becomes simpler. If an application needs to handle multiple message types,
    it can choose to run separate separate message pumps concurrently, each handling different
    types of messages. Each message pump can operate independently of one another.
+
+ * Unit tests passing on Mac OS X again.
  
 0.1.0.7
 
