@@ -30,28 +30,37 @@ other non-selected messages that are ahead of them in the queue.
 A sample of use follows:
 
 ```haskell
+module HelloWorld (
+     main
+ ) where
+
  -- Just import this package to access the primary APIs
  import Network.Endpoints
 
  -- A specific transport is necessary, however
  import Network.Transport.TCP
- 
- helloWorld :: IO ()
- helloWorld = do
-   let name1 = "endpoint1"
-       name2 = "endpoint2"
-       resolver = resolverFromList [(name1,"localhost:2000"),
-                                    (name2,"localhost:2001")]
-   transport <- newTCPTransport resolver
-   endpoint1 <- newEndpoint [transport]
-   endpoint2 <- newEndpoint [transport]
-   Right () <- bindEndpoint endpoint1 name1
-   Right () <- bindEndpoint endpoint2 name2
-   sendMessage endpoint1 name2 $ encode "hello world!"
-   msg <- receiveMessage endpoint2
-   print msg
-   shutdown transport
-   
+
+ -- Needed for serialization
+ import Data.Serialize
+
+ main :: IO ()
+ main = do
+    let name1 = "endpoint1"
+        name2 = "endpoint2"
+        resolver = resolverFromList [(name1,"localhost:2000"),
+                                (name2,"localhost:2001")]
+    transport <- newTCPTransport resolver
+    endpoint1 <- newEndpoint [transport]
+    endpoint2 <- newEndpoint [transport]
+    Right () <- bindEndpoint endpoint1 name1
+    Right () <- bindEndpoint endpoint2 name2
+    sendMessage_ endpoint1 name2 $ encode "hello world!"
+    msg <- receiveMessage endpoint2
+    let Right txt = decode msg
+        in print (txt :: String)
+    Right () <- unbindEndpoint endpoint1 name1
+    Right () <- unbindEndpoint endpoint2 name2
+    shutdown transport   
 ```
 
 To install, simply run the following in a shell:
@@ -64,6 +73,18 @@ Or if using cabal-dev, run in a directory prepared with a cabal-dev sandbox:
 
 ```
 cabal-dev install courier
+```
+
+With the  advent of sandboxes in Cabal 1.18, cabal-dev is no longer necessary,
+just use an updated cabal for simplicity. The example assumes you are building
+courier from source:
+
+```
+cabal clone https://github.com/hargettp/courier.git
+cd courier
+cabal sandbox init
+cabal install --only-dependencies
+cabal install
 ```
 
 Successfully installed on both Linux 12.04 AMD64 and Mac OS X Mount Lion, using GHC 7.6.3.
