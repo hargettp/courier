@@ -79,16 +79,16 @@ import qualified Data.Map as M
 -- > module HelloWorld (
 -- >     main
 -- > ) where
-
+-- >
 -- > -- Just import this package to access the primary APIs
 -- > import Network.Endpoints
-
+-- >
 -- > -- A specific transport is necessary, however
 -- > import Network.Transport.TCP
-
+-- >
 -- > -- Needed for serialization
 -- > import Data.Serialize
-
+-- >
 -- > main :: IO ()
 -- > main = do
 -- >    let name1 = "endpoint1"
