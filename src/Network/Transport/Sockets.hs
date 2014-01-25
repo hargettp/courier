@@ -35,6 +35,7 @@ module Network.Transport.Sockets (
     sender,
     socketSendTo,
     receiver,
+    receiveSocketBytes,
     receiveSocketMessage,
     receiveSocketMessages,
     SocketSend,

@@ -172,11 +172,7 @@ newTCPConnection address = do
         atomically $ putTMVar sock socket
         return socket,
     connSend = tcpSend address,
-    connReceive = (\s maxBytes -> do
-        bs <- NSB.recv s maxBytes
-        if B.null bs
-            then return Nothing
-            else return $ Just bs),
+    connReceive = receiveSocketBytes,
     connClose = do
         infoM _log $ "Closing connection to " ++ address
         open <- atomically $ tryTakeTMVar sock
