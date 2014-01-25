@@ -39,7 +39,8 @@ import qualified Data.Map as M
 import Data.Serialize
 import qualified Data.Set as S
 
-import Network.Socket (sClose,accept)
+import qualified Network.Socket as NS
+import qualified Network.Socket.Options as SO
 import Network.Simple.TCP hiding (accept)
 
 import System.Log.Logger
@@ -95,37 +96,44 @@ tcpBind transport inc name = do
   atomically $ modifyTVar (socketBindings transport) $ \bindings ->
     M.insert name inc bindings
   Just address <- resolve (socketResolver transport) name
-  let (_,port) = parseSocketAddress address
-  listener <- async $ do 
+  sock <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
+  listener <- do 
     infoM _log $ "Binding to address " ++ (show address)
-    tcpListen address port
+    tcpListen address sock
   return $ Right Binding {
     bindingName = name,
-    unbind = tcpUnbind listener address
+    unbind = tcpUnbind listener sock address
     }
   where
-    tcpListen address port = 
-        listen HostAny port $ \(socket,_) -> 
-            catchExceptions (do 
-                    tcpAccept address socket)
+    tcpListen address sock = do 
+                catchExceptions (do
+                        let (_,port) = parseSocketAddress address
+                        portnums <- NS.getAddrInfo 
+                            (Just NS.defaultHints {NS.addrFlags = [NS.AI_PASSIVE,NS.AI_NUMERICSERV]}) Nothing (Just port)
+                        NS.setSocketOption sock NS.NoDelay 1
+                        NS.setSocketOption sock NS.ReuseAddr 1
+                        SO.setLinger sock $ Just 1
+                        NS.bind sock (NS.addrAddress $ head portnums)
+                        NS.listen sock 2048) -- TODO think about a configurable backlog
                     (\e -> do
-                           warningM _log $ "Listen error: " ++ (show (e :: SomeException)))
-    tcpAccept address socket = do
-      infoM _log $ "Listening for connections on " ++ (show address) ++ ": " ++ (show socket)
-      (client,clientAddress) <- accept socket
+                    warningM _log $ "Listen error on port " ++ address ++ ": " ++ (show (e :: SomeException))
+                    NS.sClose sock)
+                async $ tcpAccept address sock
+    tcpAccept address sock = do
+      infoM _log $ "Listening for connections on " ++ (show address) ++ ": " ++ (show sock)
+      (client,clientAddress) <- NS.accept sock
       _ <- async $ tcpDispatch address client clientAddress
-      tcpAccept address socket
+      tcpAccept address sock
     tcpDispatch address client socketAddress = do
       infoM _log $ "Accepted connection on " ++ (show address)
       identity <- tcpIdentify client socketAddress
       case identity of
-        Nothing -> sClose client
+        Nothing -> NS.sClose client
         Just (IdentifyMessage clientAddress) -> do
           infoM _log $ "Identified " ++ (show clientAddress)
-          clientSocket <- atomically $ newTMVar client
           newConn <- newTCPConnection clientAddress
-          let conn = newConn {connSocket = clientSocket}
-          msngr <- newMessenger conn (socketInbound transport)
+          atomically $ putTMVar (connSocket newConn) client
+          msngr <- newMessenger newConn (socketInbound transport)
           found <- atomically $ do
             msngrs <- readTVar $ socketMessengers transport
             return $ M.lookup clientAddress msngrs
@@ -145,9 +153,11 @@ tcpBind transport inc name = do
           case msg of
             Left _ -> return Nothing
             Right message -> return $ Just message
-    tcpUnbind listener address = do 
+    tcpUnbind listener sock address = do 
       infoM _log $ "Unbinding from port " ++ (show address)
       cancel listener
+      NS.sClose sock
+      infoM _log $ "Unbound from port " ++ (show address)
 
 newTCPConnection :: Address -> IO Connection
 newTCPConnection address = do
@@ -158,15 +168,22 @@ newTCPConnection address = do
     connSocket = sock,
     connConnect = do
         (s,_) <- connectSock host port
+        atomically $ putTMVar sock s
         return s,
-    -- connSend = send,
     connSend = tcpSend address,
     connReceive = recv,
     connClose = do
+        infoM _log $ "Closing connection to " ++ address
         open <- atomically $ tryTakeTMVar sock
         case open of
-            Just socket -> sClose socket
-            Nothing -> return ()
+            Just socket -> do
+                infoM _log $ "Closing socket " ++ (show socket) ++ " for " ++ address
+                NS.sClose socket
+                infoM _log $ "Closed socket " ++ (show socket) ++ " for " ++ address
+            Nothing -> do
+                infoM _log $ "No socket to close for " ++ address
+                return ()
+        infoM _log $ "Connection to " ++ address ++ " closed"
     }
 
 newTCPMessenger :: Bindings -> Resolver -> Connection -> Mailbox Message -> IO Messenger

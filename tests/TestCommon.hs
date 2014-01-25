@@ -33,13 +33,6 @@ import Test.HUnit
 testDelay :: Int
 testDelay = 1 * 1000000
 
-verifiedSend :: String -> Endpoint -> Endpoint -> Name -> Name -> String -> Assertion
-verifiedSend _log endpoint1 endpoint2 name1 name2 msg = do
-  infoM _log $ "Sending message from " ++ name1 ++ " to " ++ name2
-  sendMessage_ endpoint1 name2 $ encode msg
-  Just msg1 <- receiveMessageTimeout endpoint2 testDelay
-  assertEqual "Received message not same as sent" (Right msg) (decode msg1)
-
 {-
 Common tests--just supply the transport factory and 2 addresses
 -}
@@ -58,6 +51,7 @@ endpointTransport _log newTransport address1 address2 = do
 
 endpointBindUnbind :: String -> (Resolver -> IO Transport) -> Address -> Address -> Assertion
 endpointBindUnbind _log newTransport address1 address2 = do
+  infoM _log "Starting bind-unbind test"
   let name1 = "endpoint1"
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),
@@ -75,91 +69,81 @@ endpointBindUnbind _log newTransport address1 address2 = do
 
 endpointSendReceive :: String -> (Resolver -> IO Transport) -> Address -> Address -> Assertion
 endpointSendReceive _log newTransport address1 address2 = do
+  infoM _log "Starting send-receive test"
   let name1 = "endpoint1"
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),
                                (name2,address2)]
-  bracket (newTransport resolver)
-    shutdown
-    (\transport1 -> 
-        bracket (newTransport resolver)
-          shutdown
-          (\transport2 -> do 
-              endpoint1 <- newEndpoint [transport1]
-              endpoint2 <- newEndpoint [transport2]
-              Right () <- bindEndpoint endpoint1 name1
-              Right () <- bindEndpoint endpoint2 name2
-              threadDelay testDelay
+  bracketTest _log resolver newTransport $ \transport1 transport2 -> do 
+      endpoint1 <- newEndpoint [transport1]
+      endpoint2 <- newEndpoint [transport2]
+      Right () <- bindEndpoint endpoint1 name1
+      Right () <- bindEndpoint endpoint2 name2
+      threadDelay testDelay
 
-              infoM _log "Sending message from 1 to 2"
-              sendMessage_ endpoint1 name2 $ encode "hello!"
-              Just msg <- receiveMessageTimeout endpoint2 testDelay
-              assertEqual "Received message not same as sent" (Right "hello!") (decode msg)
-              Right () <- unbindEndpoint endpoint1 name1
-              Right () <- unbindEndpoint endpoint2 name2
-              return ()))
+      verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"
+
+      Right () <- unbindEndpoint endpoint1 name1
+      Right () <- unbindEndpoint endpoint2 name2
+      return ()
+  infoM _log "Finished send-receive test"
 
 endpointDoubleSendReceive :: String -> (Resolver -> IO Transport) -> Address -> Address -> Assertion
 endpointDoubleSendReceive _log newTransport address1 address2 = do
+  infoM _log "Starting double-send-receive test"
   let name1 = "endpoint1"
       name2 = "endpoint2"
       name3 = "endpoint3"
   let resolver = resolverFromList [(name1,address1),
                                (name2,address2),
                                (name3,address1)]
-  bracket (newTransport resolver)
-    shutdown
-    (\transport1 -> do 
-        bracket (newTransport resolver)
-          shutdown
-          (\transport2 -> do
-              endpoint1 <- newEndpoint [transport1]
-              endpoint2 <- newEndpoint [transport2]
-              endpoint3 <- newEndpoint [transport1]
-              Right () <- bindEndpoint endpoint1 name1
-              Right () <- bindEndpoint endpoint2 name2
-              Right () <- bindEndpoint endpoint3 name3
-              threadDelay testDelay
+  bracketTest _log resolver newTransport $ \transport1 transport2 -> do 
+      endpoint1 <- newEndpoint [transport1]
+      endpoint2 <- newEndpoint [transport2]
+      endpoint3 <- newEndpoint [transport1]
+      Right () <- bindEndpoint endpoint1 name1
+      Right () <- bindEndpoint endpoint2 name2
+      Right () <- bindEndpoint endpoint3 name3
+      threadDelay testDelay
 
-              verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"
-              verifiedSend _log endpoint3 endpoint2 name3 name2 "ciao!"
-              
-              Right () <- unbindEndpoint endpoint1 name1
-              
-              verifiedSend _log endpoint3 endpoint2 name3 name2 "hi!"
-              
-              Right () <- unbindEndpoint endpoint2 name2
-              Right () <- unbindEndpoint endpoint3 name3
-              return ()))
+      verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"
+      verifiedSend _log endpoint3 endpoint2 name3 name2 "ciao!"
+
+      Right () <- unbindEndpoint endpoint1 name1
+
+      verifiedSend _log endpoint3 endpoint2 name3 name2 "hi!"
+
+      Right () <- unbindEndpoint endpoint2 name2
+      Right () <- unbindEndpoint endpoint3 name3
+      return ()
+  infoM _log "Finished double-send-receive test"
 
 endpointSendReceiveReply :: String -> (Resolver -> IO Transport) -> Address -> Address -> Assertion
 endpointSendReceiveReply _log newTransport address1 address2 = do
+  infoM _log "Starting send-receive-replyt test"
   let name1 = "endpoint1"
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),
                                    (name2,address2)]
-  bracket (newTransport resolver)
-    shutdown
-    (\transport1 -> 
-        bracket (newTransport resolver)
-          shutdown
-          (\transport2 -> do 
-              endpoint1 <- newEndpoint [transport1]
-              endpoint2 <- newEndpoint [transport2]
-              Right () <- bindEndpoint endpoint1 name1
-              Right () <- bindEndpoint endpoint2 name2
-              threadDelay testDelay
+  bracketTest _log resolver newTransport $ \transport1 transport2 -> do 
+      endpoint1 <- newEndpoint [transport1]
+      endpoint2 <- newEndpoint [transport2]
+      Right () <- bindEndpoint endpoint1 name1
+      Right () <- bindEndpoint endpoint2 name2
+      threadDelay testDelay
               
-              verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"
-              verifiedSend _log endpoint2 endpoint1 name2 name1 "hi!"
+      verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"
+      verifiedSend _log endpoint2 endpoint1 name2 name1 "hi!"
               
-              Right () <- unbindEndpoint endpoint1 name1
-              Right () <- unbindEndpoint endpoint2 name2
+      Right () <- unbindEndpoint endpoint1 name1
+      Right () <- unbindEndpoint endpoint2 name2
                 
-              return ()))
-  
+      return ()
+  infoM _log "Finished send-receive-reply test"
+
 endpointLocalSendReceiveReply :: String -> (Resolver -> IO Transport) -> Address -> Address -> Assertion
 endpointLocalSendReceiveReply _log newTransport address1 _ = do
+  infoM _log "Starting local-send-receive-reply test"    
   let name1 = "endpoint1"
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),
@@ -180,35 +164,52 @@ endpointLocalSendReceiveReply _log newTransport address1 _ = do
         Right () <- unbindEndpoint endpoint2 name2
                 
         return ())
-    
+  infoM _log "Finished local-send-receive-reply test"
+
 endpointMultipleSendReceiveReply :: String -> (Resolver -> IO Transport) -> Address -> Address -> Assertion
 endpointMultipleSendReceiveReply _log newTransport address1 address2 = do
+  infoM _log "Starting multiple-send-receive-reply test"
   let name1 = "endpoint1"
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),
                                    (name2,address2)]
-  bracket (newTransport resolver)
-    shutdown
-    (\transport1 -> 
-        bracket (newTransport resolver)
-          shutdown
-          (\transport2 -> do 
-              endpoint1 <- newEndpoint [transport1]
-              endpoint2 <- newEndpoint [transport2]
-              Right () <- bindEndpoint endpoint1 name1
-              Right () <- bindEndpoint endpoint2 name2
-              threadDelay testDelay
+  bracketTest _log resolver newTransport $ \transport1 transport2 -> do 
+      endpoint1 <- newEndpoint [transport1]
+      endpoint2 <- newEndpoint [transport2]
+      Right () <- bindEndpoint endpoint1 name1
+      Right () <- bindEndpoint endpoint2 name2
+      threadDelay testDelay
 
-              roundtrip endpoint1 endpoint2 name1 name2
-              roundtrip endpoint2 endpoint1 name2 name1
-              roundtrip endpoint1 endpoint2 name1 name2
-              roundtrip endpoint2 endpoint1 name2 name1
-              
-              Right () <- unbindEndpoint endpoint1 name1
-              Right () <- unbindEndpoint endpoint2 name2
-                
-              return ()))
+      roundtrip endpoint1 endpoint2 name1 name2
+      roundtrip endpoint2 endpoint1 name2 name1
+      roundtrip endpoint1 endpoint2 name1 name2
+      roundtrip endpoint2 endpoint1 name2 name1
+
+      Right () <- unbindEndpoint endpoint1 name1
+      Right () <- unbindEndpoint endpoint2 name2
+
+      return ()
+  infoM _log "Finished multiple-send-receive-reply test"
     where
       roundtrip endpoint1 endpoint2 name1 name2 = do
         verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"                
         verifiedSend _log endpoint2 endpoint1 name2 name1 "hi!"
+
+-- helpers
+
+bracketTest :: String -> Resolver -> (Resolver -> IO Transport) -> (Transport -> Transport -> Assertion) -> Assertion
+bracketTest _log resolver newTransport blk = do
+    bracket (newTransport resolver)
+        shutdown
+        (\transport1 -> 
+            bracket (newTransport resolver)
+                shutdown
+                (\transport2 -> catch (blk transport1 transport2)
+                                    (\e -> errorM _log $ "Encountered error running test: " ++ (show (e :: SomeException)))))
+
+verifiedSend :: String -> Endpoint -> Endpoint -> Name -> Name -> String -> Assertion
+verifiedSend _log endpoint1 endpoint2 name1 name2 msg = do
+  infoM _log $ "Sending message from " ++ name1 ++ " to " ++ name2
+  sendMessage_ endpoint1 name2 $ encode msg
+  Just msg1 <- receiveMessageTimeout endpoint2 testDelay
+  assertEqual "Received message not same as sent" (Right msg) (decode msg1)

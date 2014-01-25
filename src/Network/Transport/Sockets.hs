@@ -109,12 +109,13 @@ happens asynchronously, allowing applications to move on without regard for
 when any send / receive action actually completes.
 -}
 data Messenger = Messenger {
-  messengerOut :: Mailbox Message,
-  messengerAddress :: Address,
-  messengerSender :: Async (),
-  messengerReceiver :: Async (),
-  messengerConnection :: Connection
-  }
+    messengerDone :: TVar Bool,
+    messengerOut :: Mailbox Message,
+    messengerAddress :: Address,
+    messengerSender :: Async (),
+    messengerReceiver :: Async (),
+    messengerConnection :: Connection
+    }
 
 data IdentifyMessage = IdentifyMessage Address deriving (Generic)
 
@@ -161,9 +162,11 @@ instance Show Messenger where
 newMessenger :: Connection -> Mailbox Message -> IO Messenger
 newMessenger conn inc = do
   out <- atomically $ newMailbox
-  sndr <- async $ sender conn out
-  rcvr <- async $ receiver conn inc
+  done <- atomically $ newTVar False
+  sndr <- async $ sender conn done out
+  rcvr <- async $ receiver conn done inc
   return Messenger {
+    messengerDone = done,
     messengerOut = out,
     messengerAddress = connAddress conn,
     messengerSender = sndr,
@@ -181,7 +184,7 @@ addMessenger transport address msngr = do
 
 deliver :: Messenger -> Message -> IO ()
 deliver msngr message = atomically $ writeMailbox (messengerOut msngr) message
-    
+
 dispatcher :: TVar (M.Map Name (Mailbox Message)) -> Mailbox Message -> IO ()
 dispatcher bindings mbox = dispatchMessages
   where
@@ -209,8 +212,8 @@ dispatcher bindings mbox = dispatchMessages
                 writeMailbox dest msg
                 return ()
 
-sender :: Connection -> Mailbox Message -> IO ()
-sender conn mailbox = sendMessages
+sender :: Connection -> TVar Bool -> Mailbox Message -> IO ()
+sender conn done mailbox = sendMessages
   where
     sendMessages = do
       reconnect
@@ -227,7 +230,10 @@ sender conn mailbox = sendMessages
             (\e -> do
                 warningM _log $ "Send error: " ++ (show (e :: SomeException))
                 disconnect)
-      sendMessages
+      isDone <- atomically $ readTVar done
+      if isDone 
+        then return ()
+        else sendMessages
     reconnect = do
       -- TODO need a timeout here, in case connecting always fails
       connected <- atomically $ tryReadTMVar $ connSocket conn
@@ -284,24 +290,29 @@ socketSendTo transport name msg = do
           return ()
         Just msngr -> deliver msngr env
 
-receiver :: Connection -> Mailbox Message -> IO ()
-receiver conn mailbox  = do 
+receiver :: Connection -> TVar Bool -> Mailbox Message -> IO ()
+receiver conn done mailbox  = do 
     socket <- atomically $ readTMVar $ connSocket conn
-    receiveSocketMessages socket (connAddress conn) mailbox
+    receiveSocketMessages socket done (connAddress conn) mailbox
 
-receiveSocketMessages :: Socket -> Address -> Mailbox Message -> IO ()
-receiveSocketMessages sock addr mailbox = catchExceptions (do
-      infoM _log $ "Waiting to receive on " ++ (show addr)
-      maybeMsg <- receiveSocketMessage sock
-      infoM _log $ "Received message on " ++ (show addr)
-      case maybeMsg of
-        Nothing -> do
-          sClose sock
-          return ()
-        Just msg -> do
-          atomically $ writeMailbox mailbox msg
-          receiveSocketMessages sock addr mailbox) (\e -> do 
-                           warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
+receiveSocketMessages :: Socket -> TVar Bool -> Address -> Mailbox Message -> IO ()
+receiveSocketMessages sock done addr mailbox = do 
+    catchExceptions (do
+          infoM _log $ "Waiting to receive on " ++ (show addr)
+          maybeMsg <- receiveSocketMessage sock
+          infoM _log $ "Received message on " ++ (show addr)
+          case maybeMsg of
+            Nothing -> do
+              sClose sock
+              return ()
+            Just msg -> do
+              atomically $ writeMailbox mailbox msg)
+          (\e -> do 
+              warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
+    isDone <- atomically $ readTVar done
+    if isDone
+        then return ()
+        else receiveSocketMessages sock done addr mailbox
 
 receiveSocketMessage :: Socket -> IO (Maybe Message)
 receiveSocketMessage socket = do
@@ -320,6 +331,9 @@ receiveSocketMessage socket = do
 
 closeMessenger :: Messenger -> IO ()
 closeMessenger msngr = do
+  infoM _log $ "Closing mesenger to " ++ (messengerAddress msngr)
+  atomically $ modifyTVar (messengerDone msngr) (\_ -> True)
   cancel $ messengerSender msngr
   cancel $ messengerReceiver msngr
   connClose $ messengerConnection msngr
+  infoM _log $ "Closed messenger to " ++ (messengerAddress msngr)
