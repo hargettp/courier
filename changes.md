@@ -10,7 +10,12 @@
    it can choose to run separate separate message pumps concurrently, each handling different
    types of messages. Each message pump can operate independently of one another.
 
- * Unit tests passing on Mac OS X again.
+ * Fixed issue #2 and other interim bugs all resulting from multiple name bindings that resolve
+   the same underlying address.  Now, bound sockets are reused (with reference counting) so 
+   that if there are multiple bindings to the same address only 1 socket is created and user.
+
+ * Unit tests passing on Mac OS X again, mostly due to correct management of sockets and 
+   appropriate reuse.
  
 0.1.0.7
 
