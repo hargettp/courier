@@ -69,9 +69,9 @@ newUDPTransport resolver = do
   let transport = SocketTransport {
         socketMessengers = messengers,
         socketBindings = bindings,
-        socketInbound = inbound,
         socketConnection = newUDPConnection,
         socketMessenger = newUDPMessenger,
+        socketInbound = inbound,
         socketDispatchers = S.fromList [dispatch],
         socketResolver = resolver
         }

@@ -1,4 +1,4 @@
-module TestCommon (
+module TestSockets (
     testDelay,
     verifiedSend,
 
@@ -208,7 +208,9 @@ bracketTest _log resolver newTransport blk = do
             bracket (newTransport resolver)
                 shutdown
                 (\transport2 -> catch (blk transport1 transport2)
-                                    (\e -> errorM _log $ "Encountered error running test: " ++ (show (e :: SomeException)))))
+                                    (\e -> do 
+                                        errorM _log $ "Encountered error running test: " ++ (show (e :: SomeException))
+                                        assertFailure "Unexpected error")))
 
 verifiedSend :: String -> Endpoint -> Endpoint -> Name -> Name -> String -> Assertion
 verifiedSend _log endpoint1 endpoint2 name1 name2 msg = do

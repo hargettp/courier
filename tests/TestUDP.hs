@@ -5,7 +5,7 @@ module TestUDP where
 import Network.Endpoints
 import Network.Transport.UDP
 
-import TestCommon
+import TestSockets
 
 -- external imports
 

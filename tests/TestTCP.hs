@@ -5,7 +5,7 @@ module TestTCP (tests) where
 import Network.Endpoints
 import Network.Transport.TCP
 
-import TestCommon
+import TestSockets
 
 -- external imports
 

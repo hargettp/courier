@@ -316,7 +316,9 @@ receiveSocketMessages sock done addr mailbox = do
               isDone <- atomically $ readTVar done
               if isDone
                 then return ()
-                else warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
+                -- Dropping this message to info, as even well-behaved applications
+                -- may generate it...even though it is benign
+                else infoM _log $ "Receive error: " ++ (show (e :: SomeException)))
 
 receiveSocketMessage :: Socket -> IO (Maybe B.ByteString)
 receiveSocketMessage socket = do

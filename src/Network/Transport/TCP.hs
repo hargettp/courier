@@ -68,9 +68,9 @@ newTCPTransport resolver = do
   let transport = SocketTransport {
         socketMessengers = messengers,
         socketBindings = bindings,
-        socketInbound = inbound,
         socketConnection = newTCPConnection,
         socketMessenger = newTCPMessenger bindings resolver,
+        socketInbound = inbound,
         socketDispatchers = S.fromList [dispatch],
         socketResolver = resolver
         }
