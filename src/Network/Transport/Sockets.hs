@@ -19,6 +19,11 @@ module Network.Transport.Sockets (
 
     Bindings,
 
+    newSocketBindings,
+    SocketBindings,
+    bindAddress,
+    unbindAddress,
+
     SocketTransport(..),
 
     Connection(..),
@@ -77,6 +82,93 @@ _log :: String
 _log = "transport.sockets"
 
 type Bindings = TVar (M.Map Name (Mailbox Message))
+
+data SocketBinding = SocketBinding {
+    socketCount :: TVar Int,
+    socketSocket :: TMVar Socket,
+    socketListener :: TMVar (Async ())
+}
+
+type SocketBindings = TVar (M.Map Address SocketBinding)
+
+newSocketBindings :: IO SocketBindings
+newSocketBindings = atomically $ newTVar M.empty
+
+bindAddress :: SocketBindings -> Address -> IO (Socket,Async ()) -> IO ()
+bindAddress bindings address factory = do
+    (count,binding) <- atomically $ do
+        bmap <- readTVar bindings
+        bndg <- case M.lookup address bmap of
+            Nothing -> do
+                count <- newTVar 1
+                listener <- newEmptyTMVar
+                sock <- newEmptyTMVar
+                let binding = SocketBinding {
+                    socketCount = count,
+                    socketListener = listener,
+                    socketSocket = sock
+                    }
+                modifyTVar bindings $ \bs -> M.insert address binding bs
+                return binding
+            Just binding -> do
+                modifyTVar (socketCount binding) $ \c -> c + 1
+                return binding
+        count <- readTVar $ socketCount bndg
+        return (count,bndg)
+    if count == 1
+        then do
+            infoM _log $ "Opening binding for " ++ (show address)
+            (sock,listener) <- factory
+            infoM _log $ "Opened binding for " ++ (show address)
+            atomically $ do
+                putTMVar (socketSocket binding) sock
+                putTMVar (socketListener binding) listener
+            return ()
+        else return ()
+
+unbindAddress :: SocketBindings -> Address -> IO ()
+unbindAddress bindings address = do
+    (count, maybeBinding) <- atomically $ do
+        bmap <- readTVar bindings
+        case M.lookup address bmap of
+            Nothing -> return (0,Nothing)
+            Just b -> do
+                modifyTVar (socketCount b) $ \count -> count - 1
+                count <- readTVar (socketCount b)
+                return (count,Just b)
+    case maybeBinding of
+        -- no binding to shutdown; can just return
+        Nothing -> do
+            warningM _log $ "No binding for " ++ (show address) ++ "; count is " ++ (show count)
+            return ()
+        -- we're the last, so close the binding
+        Just binding -> do
+            if count == 0
+                then do
+                    (sock,listener) <- atomically $ do
+                        sock <- takeTMVar $ socketSocket binding
+                        listener <- takeTMVar $ socketListener binding
+                        return (sock,listener)
+                    infoM _log $ "Closing binding for " ++ (show address) ++ "; count is " ++ (show count)
+                    cancel listener
+                    sClose sock
+                    infoM _log $ "Closed binding for " ++ (show address)
+                    -- now we remove the binding from the map, if it is still there and 0
+                    -- the expectation here is that only one thread is going to remove it
+                    -- from the map
+                    atomically $ do
+                        bmap <- readTVar bindings
+                        case M.lookup address bmap of
+                            Nothing -> return ()
+                            Just b -> do
+                                newCount <- readTVar (socketCount b)
+                                if newCount == 0
+                                    then do
+                                        modifyTVar bindings $ \bm -> M.delete address bm
+                                        return ()
+                                    else return ()
+                else return ()
+            return ()
 
 data SocketTransport = SocketTransport {
   socketMessengers :: TVar (M.Map Address Messenger),

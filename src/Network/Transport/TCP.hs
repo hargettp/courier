@@ -63,6 +63,7 @@ newTCPTransport :: Resolver -> IO Transport
 newTCPTransport resolver = do
   messengers <- atomically $ newTVar M.empty
   bindings <- atomically $ newTVar M.empty
+  sockets <- newSocketBindings
   inbound <- atomically $ newMailbox
   dispatch <- async $ dispatcher bindings inbound
   let transport = SocketTransport {
@@ -77,7 +78,7 @@ newTCPTransport resolver = do
   return Transport {
       scheme = tcpScheme,
       handles = tcpHandles transport,
-      bind = tcpBind transport,
+      bind = tcpBind transport sockets,
       sendTo = socketSendTo transport,
       shutdown = tcpShutdown transport
       }
@@ -90,18 +91,20 @@ tcpHandles transport name = do
     isJust (Just _) = True
     isJust _ = False
 
-tcpBind :: SocketTransport -> Mailbox Message -> Name -> IO (Either String Binding)
-tcpBind transport inc name = do
-  atomically $ modifyTVar (socketBindings transport) $ \bindings ->
+tcpBind :: SocketTransport -> SocketBindings -> Mailbox Message -> Name -> IO (Either String Binding)
+tcpBind transport sockets inc name = do
+  atomically $ modifyTVar (socketBindings transport) $ \ bindings ->
     M.insert name inc bindings
   Just address <- resolve (socketResolver transport) name
-  sock <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
-  listener <- do 
-    infoM _log $ "Binding to address " ++ (show address)
-    tcpListen address sock
+  bindAddress sockets address $ do
+      sock <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
+      listener <- do
+        infoM _log $ "Binding to address " ++ (show address)
+        tcpListen address sock
+      return (sock,listener)
   return $ Right Binding {
     bindingName = name,
-    unbind = tcpUnbind listener sock address
+    unbind = tcpUnbind address
     }
   where
     tcpListen address sock = do 
@@ -151,11 +154,10 @@ tcpBind transport inc name = do
           case msg of
             Left _ -> return Nothing
             Right message -> return $ Just message
-    tcpUnbind listener sock address = do 
-      infoM _log $ "Unbinding from port " ++ (show address)
-      cancel listener
-      NS.sClose sock
-      infoM _log $ "Unbound from port " ++ (show address)
+    tcpUnbind address = do
+      infoM _log $ "Unbinding from TCP port " ++ (show address)
+      unbindAddress sockets address
+      infoM _log $ "Unbound from TCP port " ++ (show address)
 
 newTCPConnection :: Address -> IO Connection
 newTCPConnection address = do

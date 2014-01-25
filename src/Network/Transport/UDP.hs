@@ -64,6 +64,7 @@ newUDPTransport :: Resolver -> IO Transport
 newUDPTransport resolver = do
   messengers <- atomically $ newTVar M.empty
   bindings <- atomically $ newTVar M.empty
+  sockets <- newSocketBindings
   inbound <- atomically $ newMailbox
   dispatch <- async $ dispatcher bindings inbound
   let transport = SocketTransport {
@@ -78,7 +79,7 @@ newUDPTransport resolver = do
   return Transport {
       scheme = udpScheme,
       handles = udpHandles transport,
-      bind = udpBind transport,
+      bind = udpBind transport sockets,
       sendTo = socketSendTo transport,
       shutdown = udpShutdown transport
       }
@@ -91,30 +92,32 @@ udpHandles transport name = do
     isJust (Just _) = True
     isJust _ = False
 
-udpBind :: SocketTransport -> Mailbox Message -> Name -> IO (Either String Binding)
-udpBind transport inc name = do
+udpBind :: SocketTransport -> SocketBindings -> Mailbox Message -> Name -> IO (Either String Binding)
+udpBind transport sockets inc name = do
     atomically $ modifyTVar (socketBindings transport) $ \bindings ->
         M.insert name inc bindings
     Just address <- resolve (socketResolver transport) name
-    let (_,port) = parseSocketAddress address
-    addrinfos <- N.getAddrInfo
-                    (Just (N.defaultHints {N.addrFlags = [N.AI_PASSIVE,N.AI_NUMERICSERV]}))
-                    Nothing (Just port)
-    let serveraddr = head addrinfos
-    sock <-  N.socket (N.addrFamily serveraddr) N.Datagram N.defaultProtocol
-    -- have to set this option in case we frequently rebind sockets
-    infoM _log $ "Binding to " ++ (show port) ++ " over UDP"
-    N.setSocketOption sock N.ReuseAddr 1
-    N.bindSocket sock $ N.addrAddress serveraddr
-    infoM _log $ "Bound to " ++ (show port) ++ " over UDP"
-    rcvr <- async $ udpReceiveSocketMessages sock address (socketInbound transport)
+    bindAddress sockets address $ do
+        let (_,port) = parseSocketAddress address
+        addrinfos <- N.getAddrInfo
+                        (Just (N.defaultHints {N.addrFlags = [N.AI_PASSIVE,N.AI_NUMERICSERV]}))
+                        Nothing (Just port)
+        let serveraddr = head addrinfos
+        sock <-  N.socket (N.addrFamily serveraddr) N.Datagram N.defaultProtocol
+        -- have to set this option in case we frequently rebind sockets
+        infoM _log $ "Binding to " ++ (show port) ++ " over UDP"
+        N.setSocketOption sock N.ReuseAddr 1
+        N.bindSocket sock $ N.addrAddress serveraddr
+        infoM _log $ "Bound to " ++ (show port) ++ " over UDP"
+        rcvr <- async $ udpReceiveSocketMessages sock address (socketInbound transport)
+        return (sock,rcvr)
     return $ Right Binding {
         bindingName = name,
         unbind = do
-            cancel rcvr
-            infoM _log $ "Closing UDP socket bound on " ++ (show port)
-            N.sClose sock
-        }
+            infoM _log $ "Unbinding from UDP port " ++ (show address)
+            unbindAddress sockets address
+            infoM _log $ "Unbound from UDP port " ++ (show address)
+    }
 
 newUDPConnection :: Address -> IO Connection
 newUDPConnection address = do
@@ -143,18 +146,20 @@ newUDPMessenger conn mailbox = do
     return msngr
 
 udpReceiveSocketMessages :: N.Socket -> Address -> Mailbox Message -> IO ()
-udpReceiveSocketMessages sock addr mailbox = catchExceptions (do
-    infoM _log $ "Waiting to receive via UDP on " ++ (show addr)
-    maybeMsg <- udpReceiveSocketMessage
-    infoM _log $ "Received message via UDP on " ++ (show addr)
-    case maybeMsg of
-        Nothing -> do
-            N.sClose sock
-            return ()
-        Just msg -> do
-            atomically $ writeMailbox mailbox msg
-            udpReceiveSocketMessages sock addr mailbox) (\e -> do 
-                warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
+udpReceiveSocketMessages sock addr mailbox = catchExceptions 
+    (do
+        infoM _log $ "Waiting to receive via UDP on " ++ (show addr)
+        maybeMsg <- udpReceiveSocketMessage
+        infoM _log $ "Received message via UDP on " ++ (show addr)
+        case maybeMsg of
+            Nothing -> do
+                N.sClose sock
+                return ()
+            Just msg -> do
+                atomically $ writeMailbox mailbox msg
+                udpReceiveSocketMessages sock addr mailbox) 
+    (\e -> do
+        warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
     where
         udpReceiveSocketMessage = do
             maybeMsg <- udpRecvFrom sock 512

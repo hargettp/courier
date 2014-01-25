@@ -56,4 +56,3 @@ testEndpoint :: Assertion
 testEndpoint = do
   _ <- newEndpoint []
   return ()
-  
