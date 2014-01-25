@@ -306,13 +306,16 @@ receiveSocketMessages sock done addr mailbox = do
               sClose sock
               return ()
             Just msg -> do
-              atomically $ writeMailbox mailbox msg)
-          (\e -> do 
-              warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
-    isDone <- atomically $ readTVar done
-    if isDone
-        then return ()
-        else receiveSocketMessages sock done addr mailbox
+              atomically $ writeMailbox mailbox msg
+          isDone <- atomically $ readTVar done
+          if isDone
+            then return ()
+            else receiveSocketMessages sock done addr mailbox)
+          (\e -> do
+              isDone <- atomically $ readTVar done
+              if isDone
+                then return ()
+                else warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
 
 receiveSocketMessage :: Socket -> IO (Maybe Message)
 receiveSocketMessage socket = do

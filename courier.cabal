@@ -54,7 +54,6 @@ library
                        containers,
                        hslogger,
                        network,
-                       network-socket-options,
                        network-simple,
                        stm,
                        text

@@ -40,8 +40,7 @@ import Data.Serialize
 import qualified Data.Set as S
 
 import qualified Network.Socket as NS
-import qualified Network.Socket.Options as SO
-import Network.Simple.TCP hiding (accept)
+import qualified Network.Socket.ByteString as NSB
 
 import System.Log.Logger
 
@@ -112,7 +111,6 @@ tcpBind transport inc name = do
                             (Just NS.defaultHints {NS.addrFlags = [NS.AI_PASSIVE,NS.AI_NUMERICSERV]}) Nothing (Just port)
                         NS.setSocketOption sock NS.NoDelay 1
                         NS.setSocketOption sock NS.ReuseAddr 1
-                        SO.setLinger sock $ Just 1
                         NS.bind sock (NS.addrAddress $ head portnums)
                         NS.listen sock 2048) -- TODO think about a configurable backlog
                     (\e -> do
@@ -167,11 +165,18 @@ newTCPConnection address = do
     connAddress = address,
     connSocket = sock,
     connConnect = do
-        (s,_) <- connectSock host port
-        atomically $ putTMVar sock s
-        return s,
+        socket <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
+        sockAddrs <- NS.getAddrInfo 
+                            (Just NS.defaultHints {NS.addrFlags = [NS.AI_NUMERICSERV]}) (Just host) (Just port)
+        NS.connect socket $ NS.addrAddress $ head sockAddrs
+        atomically $ putTMVar sock socket
+        return socket,
     connSend = tcpSend address,
-    connReceive = recv,
+    connReceive = (\s maxBytes -> do
+        bs <- NSB.recv s maxBytes
+        if B.null bs
+            then return Nothing
+            else return $ Just bs),
     connClose = do
         infoM _log $ "Closing connection to " ++ address
         open <- atomically $ tryTakeTMVar sock
@@ -202,11 +207,11 @@ newTCPMessenger bindings resolver conn mailbox = do
                 Nothing -> return()
                 Just uniqueAddress -> deliver msngr $ encode $ IdentifyMessage uniqueAddress
 
-tcpSend :: Address -> Socket -> B.ByteString -> IO ()
+tcpSend :: Address -> NS.Socket -> B.ByteString -> IO ()
 tcpSend addr sock bs = do
-    send sock $ encode (B.length bs)
+    NSB.sendAll sock $ encode (B.length bs)
     infoM _log $ "Length sent"
-    send sock bs
+    NSB.sendAll sock bs
     infoM _log $ "Message sent to" ++ (show addr)
 
 
