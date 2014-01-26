@@ -4,6 +4,8 @@
       an example workking with the current API
       
     * Early implementation of synchronous RPCs on top of endpoints, with basic unit tests.
+      Both single and group RPCs are implemented, as are calls with definite and indefinite
+      waits for responses.
       
 0.1.0.8
 

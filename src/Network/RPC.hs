@@ -24,6 +24,7 @@ module Network.RPC (
     call,
     callWithTimeout,
     gcall,
+    gcallWithTimeout,
 
     HandleSite,
     handle,
@@ -39,6 +40,7 @@ import Network.Endpoints
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Concurrent.STM
 import Control.Monad
 
 import qualified Data.Map as M
@@ -140,7 +142,7 @@ Group call or RPC: call a method with the provided arguments on all the recipien
 A 'Request' will be made through the 'CallSite''s 'Endpoint', and then
 the caller will wait until all matching 'Response's are received.
 -}
-gcall :: (Serialize a, Serialize b) => CallSite -> [Name] -> Method -> a -> IO  [b]
+gcall :: (Serialize a, Serialize b) => CallSite -> [Name] -> Method -> a -> IO (M.Map Name b)
 gcall (CallSite endpoint from) names method args = do
     let req = Request {requestId = "",requestCaller = from,requestMethod = method, requestArgs = args}
     sendAll req
@@ -162,9 +164,53 @@ gcall (CallSite endpoint from) names method args = do
                 expected = S.fromList names
             if S.null (S.difference expected replied)
                 -- we have everything
-                then return $ M.elems newResults
+                then return newResults
                 -- still waiting on some results, so keep receiving
                 else recvAll req newResults
+
+{-|
+Group call or RPC but with a timeout: call a method with the provided arguments on all the
+recipients with the given names. A 'Request' will be made through the 'CallSite''s 'Endpoint',
+and then the caller will wait until all matching 'Response's are received or the timeout occurs.
+-}
+gcallWithTimeout :: (Serialize a, Serialize b) => CallSite -> [Name] -> Method -> Int -> a -> IO (M.Map Name (Maybe b))
+gcallWithTimeout (CallSite endpoint from) names method delay args = do
+    let req = Request {requestId = "",requestCaller = from,requestMethod = method, requestArgs = args}
+    sendAll req
+    allResults <- atomically $ newTVar M.empty
+    responses <- race (recvAll req allResults) (threadDelay delay)
+    case responses of
+        Left results -> return $ complete results
+        Right _ -> do
+            partialResults <- atomically $ readTVar allResults
+            return $ complete partialResults
+    where
+        sendAll req = do
+            forM_ names $ \name -> sendMessage_ endpoint name $ encode req
+        recv req = selectMessage endpoint $ \msg -> do
+                case decode msg of
+                    Left _ -> Nothing
+                    Right (Response rid name value) -> do
+                        if (rid == (requestId req)) && (elem name names)
+                            then Just (name,value)
+                            else Nothing
+        recvAll :: (Serialize b) => Request a -> TVar (M.Map Name b) -> IO (M.Map Name b)
+        recvAll req allResults = do
+            (replier,result) <- recv req
+            newResults <- atomically $ do
+                modifyTVar allResults $ \results -> M.insert replier result results
+                readTVar allResults
+            let replied = S.fromList $ M.keys newResults
+                expected = S.fromList names
+            if S.null (S.difference expected replied)
+                -- we have everything
+                then return newResults
+                -- still waiting on some results, so keep receiving
+                else recvAll req allResults
+        -- Make sure the final results have an entry for every name,
+        -- but put Nothing for those handlers that did not return a result in time
+        complete :: (Serialize b) => M.Map Name b -> M.Map Name (Maybe b)
+        complete partial = foldl (\final name -> M.insert name (M.lookup name partial) final) M.empty names
 
 {-|
 A 'HandleSite' is a just reference to the actual handler of a specific method.
