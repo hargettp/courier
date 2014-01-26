@@ -14,6 +14,7 @@ description:         Inspired by Erlang's simple message-passing facilities, cou
                      of message reception with multiple independent dispatch routines or message pumps.
                      
 extra-source-files:  changes.md
+                     examples/HelloWorld.hs
 homepage:          http://github.com/hargettp/courier
 license:             MIT
 license-file:        LICENSE
