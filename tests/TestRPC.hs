@@ -24,6 +24,8 @@ import Network.Transport.Memory
 
 -- external imports
 
+import Control.Concurrent
+
 import Test.Framework
 import Test.HUnit
 import Test.Framework.Providers.HUnit
@@ -36,13 +38,14 @@ _log = "test.rpc"
 
 tests :: [Test.Framework.Test]
 tests = [
-    testCase "call-foo" testOneRPC,
-    testCase "call-foo-bar" testTwoRPCs,
-    testCase "gcall-foo-bar-baz" testGroupCall
+    testCase "call-one-handler" testOneHandler,
+    testCase "call-two-handlers" testTwoHandlers,
+    testCase "gcall-three-handlers" testGroupCall,
+    testCase "call-one-with-timeout" testOneHandlerWithTimeout
   ]
 
-testOneRPC :: Assertion
-testOneRPC = do
+testOneHandler :: Assertion
+testOneHandler = do
     let name1 = "endpoint1"
         name2 = "endpoint2"
     transport <- newMemoryTransport
@@ -57,8 +60,8 @@ testOneRPC = do
     assertEqual "Result not expected value" "hello!" result
     hangup h
 
-testTwoRPCs :: Assertion
-testTwoRPCs = do
+testTwoHandlers :: Assertion
+testTwoHandlers = do
     let name1 = "endpoint1"
         name2 = "endpoint2"
     transport <- newMemoryTransport
@@ -105,3 +108,32 @@ testGroupCall = do
     hangup h2
     hangup h3
     hangup h4
+
+testOneHandlerWithTimeout :: Assertion
+testOneHandlerWithTimeout = do
+    let name1 = "endpoint1"
+        name2 = "endpoint2"
+        longer = 500 * 1000 -- half a second
+        shorter = 250 * 1000 -- quarter second
+    transport <- newMemoryTransport
+    endpoint1 <- newEndpoint [transport]
+    endpoint2 <- newEndpoint [transport]
+    Right () <- bindEndpoint endpoint1 name1
+    Right () <- bindEndpoint endpoint2 name2
+    -- first call with caller waiting longer than handler
+    h1 <- handle endpoint2 name2 "foo" $ \msg -> do
+        threadDelay shorter
+        return $ msg ++ "!"
+    let cs1 = newCallSite endpoint1 name1
+    result1 <- callWithTimeout cs1 name2 "foo" longer "hello"
+    assertEqual "Result not expected value" (Just "hello!") result1
+    hangup h1
+    -- now call with handler waiting longer than caller
+    h2 <- handle endpoint2 name2 "foo" $ \msg -> do
+        threadDelay longer
+        return $ msg ++ "!"
+    let cs2 = newCallSite endpoint1 name1
+    result2 <- (callWithTimeout cs2 name2 "foo" shorter "hello") :: IO (Maybe String)
+    assertEqual "Result not expected value" Nothing result2
+    hangup h2
+    

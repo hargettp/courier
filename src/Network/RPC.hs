@@ -22,6 +22,7 @@ module Network.RPC (
     CallSite,
 
     call,
+    callWithTimeout,
     gcall,
 
     HandleSite,
@@ -36,6 +37,7 @@ import Network.Endpoints
 
 -- external imports
 
+import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad
 
@@ -115,6 +117,23 @@ call (CallSite endpoint from) name method args = do
                 if rid == (requestId req)
                     then Just value
                     else Nothing
+
+{-|
+Call a method with the provided arguments on the recipient with the given name.
+A 'Request' will be made through the 'CallSite''s 'Endpoint', and then
+the caller will wait until a matching 'Response' is received. If a response
+is received within the provided timeout (measured in microseconds), then
+return the value wrapped in 'Just'; otherwise, if the timeout expires
+before the call returns, then return 'Nothing.
+-}
+callWithTimeout :: (Serialize a, Serialize b) => CallSite -> Name -> Method -> Int-> a -> IO  (Maybe b)
+callWithTimeout site name method delay args = do
+    resultOrTimeout <- race callIt (threadDelay delay)
+    case resultOrTimeout of
+        Left value -> return $ Just value
+        Right _ -> return Nothing
+    where
+        callIt = call site name method args
 
 {-|
 Group call or RPC: call a method with the provided arguments on all the recipients with the given names.

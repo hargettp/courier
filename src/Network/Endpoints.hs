@@ -29,7 +29,9 @@ module Network.Endpoints (
   newEndpoint,
   
   bindEndpoint,
+  bindEndpoint_,
   unbindEndpoint,
+  unbindEndpoint_,
   
   sendMessage,
   sendMessage_,
@@ -151,6 +153,14 @@ bindEndpoint endpoint name = do
           return $ Right ()
 
 {-|
+Invoke 'bindEndpoint', but ignore any returned result (success or failure).
+-}
+bindEndpoint_ :: Endpoint -> Name -> IO ()
+bindEndpoint_ endpoint name = do
+    _ <- bindEndpoint endpoint name
+    return ()
+
+{-|
 Unbind an 'Endpoint' from a 'Name', after which the 'Endpoint' will eventually not 
 receive messages sent to that 'Name'. Note that there is no guarantee that after 'Unbind'
 succeeds that additional messages to that 'Name' will not be delivered: the only guarantee
@@ -167,6 +177,14 @@ unbindEndpoint endpoint name = do
     Just binding -> do 
       unbind binding
       return $ Right ()
+
+{-|
+Invoke 'unbindEndpoint', but ignore any returned result (success or failure).
+-}
+unbindEndpoint_ :: Endpoint -> Name -> IO ()
+unbindEndpoint_ endpoint name = do
+    _ <- unbindEndpoint endpoint name
+    return ()
 
 {-|
 Send a 'Message' to specific 'Name' via the indicated 'Endpoint'. While a successful
