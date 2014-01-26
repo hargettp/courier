@@ -1,7 +1,7 @@
 0.1.0.9
 
     * Added HelloWorld example, and updated code sample in documentation to reflect
-      an example workking with the current API
+      working with the current API
       
     * Early implementation of synchronous RPCs on top of endpoints, with basic unit tests.
       Both single and group RPCs are implemented, as are calls with definite and indefinite
