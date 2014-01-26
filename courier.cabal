@@ -40,6 +40,7 @@ library
                   Network.Transport.TCP
                   Network.Transport.UDP
                   Control.Concurrent.Mailbox
+                  Network.RPC
 
   ghc-options: -Wall
   other-modules:
