@@ -14,14 +14,19 @@
 -- a supplied test function, or block if no such match is possible with the messages currently 
 -- in the queue.
 --
--- As 'Mailbox' implements the same basic @read@/@write/@peek@ functions as a 'TQueue',
--- it offers a superset of 'TQueue' functionality, extending it with the @find@/@select@/@handle@
+-- As 'Mailbox' implements the same basic @read / write / peek@ group of functions as a 'TQueue',
+-- it offers a superset of 'TQueue' functionality by extending it with the @find / select / handle@
 -- groups of functions.  Thus, applications can safely use 'Mailbox'es in place of 'TQueue's,
 -- but choose when to take the slight extra overhead of 'Mailbox' functionality.
 --
 -- Because message selection in worst case requires fully traversing all messages in the queue,
 -- application designers are encouraged to understand this aspect when choosing to use 'Mailbox'es
 -- in their designs, or when using the additional features of 'Mailbox'es beyond that of 'TQueue's.
+-- Dispatching messages with a 'Mailbox' is analogous to using a @case@ expression (O(n)) to dispatch
+-- messages to a handler function, except that new cases can be added or removed at any time.  In essence,
+-- one can regard 'Mailbox'es as a useful means of creating an extensible message dispatch function.
+-- If, however, if O(1) message dispatching time is necessary or desired, (using hashmaps, for example)
+-- then 'Mailbox'es are not the correct choice.
 --
 -- Despite this extra cost, 'Mailbox'es offer advantages to designers:
 --
@@ -34,6 +39,11 @@
 -- selective message reception, multiple concurrent message pumps are possible (with
 -- a small performance impact), each processing the messages they expect and with no
 -- need to be aware of other message pumps performing their own work on the same mailbox.
+--
+-- * Mixing synchronous and asynchronous programming styles: if restricted to in order message
+-- delivery, an application must carefully construct all logic to avoid blocking its central message
+-- loop. By supporting out of message delivery and multiple selective recipients, it becomes possible
+-- to combine synchronous and asynchronous programming styles using the same 'Mailbox'.
 --
 -- Basic framework for 'Mailbox' brazenly copied from "Control.Concurrent.STM.TQueue".
 -----------------------------------------------------------------------------

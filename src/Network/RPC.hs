@@ -9,8 +9,24 @@
 -- Stability   :  experimental
 -- Portability :  non-portable (requires STM)
 --
--- An implementation of synchronous remote procedure calls on top of
+-- An implementation of synchronous remote procedure calls
+-- (<http://en.wikipedia.org/wiki/Remote_procedure_call RPC>) on top of
 -- 'Network.Endpoints.Endpoint's.
+--
+-- Applications exporting services for use by other applications via
+-- RPC call 'handle' to start listening for incoming RPC requests
+-- for a specific 'Method'.  If multiple functions or 'Method's are exported,
+-- then separate calls to 'handle' are necessary, one for each exported 'Method'.
+-- Each call to 'handle' produces a 'HandleSite' which may be used to terminate
+-- future handling of RPCs for that specific method by calling 'hangup' on the
+-- returned 'HandleSite'.
+--
+-- Applications wishing to make RPCs to other applications or services do so
+-- by first constructing a 'CallSite', and then 'call'ing specific methods
+-- on the target handler through that 'CallSite'.
+--
+-- Both single and multiple target RPCs are available, as are variants that
+-- either wait indefinitely or at most for a defined timeout.
 --
 -----------------------------------------------------------------------------
 
@@ -98,15 +114,15 @@ data CallSite = CallSite Endpoint Name
 
 {-|
 Create a new 'CallSite' using the indicated 'Endpoint' for sending
-RPCs and using the specified 'Name' for receiving 'Response'es.
+RPCs and using the specified 'Name' for receiving responses.
 -}
 newCallSite :: Endpoint -> Name -> CallSite
 newCallSite = CallSite
 
 {-|
 Call a method with the provided arguments on the recipient with the given name.
-A 'Request' will be made through the 'CallSite''s 'Endpoint', and then
-the caller will wait until a matching 'Response' is received.
+A request will be made through the 'CallSite''s 'Endpoint', and then
+the caller will wait until a matching response is received.
 -}
 call :: (Serialize a, Serialize b) => CallSite -> Name -> Method -> a -> IO  b
 call (CallSite endpoint from) name method args = do
@@ -122,8 +138,8 @@ call (CallSite endpoint from) name method args = do
 
 {-|
 Call a method with the provided arguments on the recipient with the given name.
-A 'Request' will be made through the 'CallSite''s 'Endpoint', and then
-the caller will wait until a matching 'Response' is received. If a response
+A request will be made through the 'CallSite''s 'Endpoint', and then
+the caller will wait until a matching response is received. If a response
 is received within the provided timeout (measured in microseconds), then
 return the value wrapped in 'Just'; otherwise, if the timeout expires
 before the call returns, then return 'Nothing.
@@ -139,8 +155,8 @@ callWithTimeout site name method delay args = do
 
 {-|
 Group call or RPC: call a method with the provided arguments on all the recipients with the given names.
-A 'Request' will be made through the 'CallSite''s 'Endpoint', and then
-the caller will wait until all matching 'Response's are received.
+A request will be made through the 'CallSite''s 'Endpoint', and then
+the caller will wait until all matching responses are received.
 -}
 gcall :: (Serialize a, Serialize b) => CallSite -> [Name] -> Method -> a -> IO (M.Map Name b)
 gcall (CallSite endpoint from) names method args = do
@@ -170,8 +186,11 @@ gcall (CallSite endpoint from) names method args = do
 
 {-|
 Group call or RPC but with a timeout: call a method with the provided arguments on all the
-recipients with the given names. A 'Request' will be made through the 'CallSite''s 'Endpoint',
-and then the caller will wait until all matching 'Response's are received or the timeout occurs.
+recipients with the given names. A request will be made through the 'CallSite''s 'Endpoint',
+and then the caller will wait until all matching responses are received or the timeout occurs.
+The returned 'M.Map' has a key for every 'Name' that was a target of the call, and the value
+of that key will be @Nothing@ if no response was received before the timeout, or @Just value@
+if a response was received.
 -}
 gcallWithTimeout :: (Serialize a, Serialize b) => CallSite -> [Name] -> Method -> Int -> a -> IO (M.Map Name (Maybe b))
 gcallWithTimeout (CallSite endpoint from) names method delay args = do
@@ -214,13 +233,13 @@ gcallWithTimeout (CallSite endpoint from) names method delay args = do
 
 {-|
 A 'HandleSite' is a just reference to the actual handler of a specific method.
-Mostly for invoking 'release' on the handler, once it is no longer needed.
+Mostly for invoking 'hangup' on the handler, once it is no longer needed.
 -}
 data HandleSite = HandleSite Name (Async ())
 
 {-|
 Handle all RPCs to invoke the indicated 'Method' on the specified 'Endpoint',
-until 'hangup' is called.
+until 'hangup' is called on the returned 'HandleSite'.
 -}
 handle :: (Serialize a, Serialize b) => Endpoint -> Name -> Method -> (a -> IO b) -> IO HandleSite
 handle endpoint name method fn = do

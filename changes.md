@@ -8,6 +8,8 @@
       waits for responses.
 
     * Removed dependency on network-simple
+
+    * Improved documentation throughout.
       
 0.1.0.8
 
