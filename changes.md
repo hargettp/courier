@@ -6,6 +6,8 @@
     * Early implementation of synchronous RPCs on top of endpoints, with basic unit tests.
       Both single and group RPCs are implemented, as are calls with definite and indefinite
       waits for responses.
+
+    * Removed dependency on network-simple
       
 0.1.0.8
 
