@@ -19,12 +19,13 @@ import qualified TestMailbox as MB
 import qualified TestMemory as M
 import qualified TestTCP as T
 import qualified TestUDP as U
+import qualified TestRPC as R
 
 -----------------------------------------------------------------------------
 -----------------------------------------------------------------------------
 
 main :: IO ()
-main = do 
+main = do
   initLogging
   defaultMain tests
 
@@ -49,6 +50,7 @@ tests =
   ++ M.tests
   ++ T.tests
   ++ U.tests
+  ++ R.tests
 
 -- Endpoint tests
 

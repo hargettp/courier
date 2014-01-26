@@ -1,4 +1,4 @@
-module TestSockets (
+module TestTransports (
     testDelay,
     verifiedSend,
 
@@ -123,7 +123,7 @@ endpointDoubleSendReceive _log newTransport address1 address2 = do
 
 endpointSendReceiveReply :: String -> (Resolver -> IO Transport) -> Address -> Address -> Assertion
 endpointSendReceiveReply _log newTransport address1 address2 = do
-  infoM _log "Starting send-receive-replyt test"
+  infoM _log "Starting send-receive-reply test"
   let name1 = "endpoint1"
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),

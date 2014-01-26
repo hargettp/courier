@@ -26,7 +26,6 @@ import Control.Concurrent.STM
 import Test.Framework
 import Test.HUnit
 import Test.Framework.Providers.HUnit
--- import Test.Framework.Providers.QuickCheck2
 
 -----------------------------------------------------------------------------
 -----------------------------------------------------------------------------

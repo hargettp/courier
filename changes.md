@@ -3,6 +3,8 @@
     * Added HelloWorld example, and updated code sample in documentation to reflect
       an example workking with the current API
       
+    * Early implementation of synchronous RPCs on top of endpoints, with basic unit tests.
+      
 0.1.0.8
 
  * Enabled selective out of order mesage reception, by using a Mailbox, an extension of STM's
