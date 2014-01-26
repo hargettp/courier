@@ -73,6 +73,7 @@ Test-Suite test-courier
         -- 3rd party modules
         async,
         cereal,
+        containers,
         directory,
         hslogger,
         stm,
