@@ -42,6 +42,10 @@ module Network.RPC (
     gcall,
     gcallWithTimeout,
 
+    hear,
+    hearTimeout,
+    Reply,
+
     HandleSite,
     handle,
     hangup
@@ -232,6 +236,54 @@ gcallWithTimeout (CallSite endpoint from) names method delay args = do
         complete partial = foldl (\final name -> M.insert name (M.lookup name partial) final) M.empty names
 
 {-|
+A 'Reply' is a one-shot function for sending a response to an incoming request.
+-}
+type Reply b = b -> IO ()
+
+{-|
+Wait for a single incoming request to invoke the indicated 'Method' on the specified
+'Endpoint'. Return both the method arguments and a 'Reply' function useful for sending
+the reply.  A good pattern for using 'hear' will pattern match the result to a tuple of
+the form @(args,reply)@, then use the args as needed to compute a result, and then
+finally send the result back to the client by simply passing the result to reply: @reply result@.
+-}
+hear :: (Serialize a,Serialize b) => Endpoint -> Name -> Method -> IO (a,Reply b)
+hear endpoint name method = do
+    (caller,rid,args) <- selectMessage endpoint $ \msg -> do
+                case decode msg of
+                    Left _ -> Nothing
+                    Right (Request rid caller rmethod args) -> do
+                        if rmethod == method
+                            then Just (caller,rid,args)
+                            else Nothing
+    return (args, reply caller rid)
+    where
+        reply caller rid result = do
+            sendMessage_ endpoint caller $ encode $ Response rid name result
+
+
+{-|
+Same as 'hear', except return 'Nothing' if no request received within the specified
+timeout (measured in microseconds), or return a 'Just' instance containing both the
+method arguments and a 'Reply' function useful for sending the reply.
+-}
+hearTimeout :: (Serialize a,Serialize b) => Endpoint -> Name -> Method -> Int -> IO (Maybe (a,Reply b))
+hearTimeout endpoint name method timeout = do
+    req <- selectMessageTimeout endpoint timeout $ \msg -> do
+                case decode msg of
+                    Left _ -> Nothing
+                    Right (Request rid caller rmethod args) -> do
+                        if rmethod == method
+                            then Just (caller,rid,args)
+                            else Nothing
+    case req of
+        Just (caller,rid,args) -> return $ Just (args, reply caller rid)
+        Nothing -> return Nothing
+    where
+        reply caller rid result = do
+            sendMessage_ endpoint caller $ encode $ Response rid name result
+
+{-|
 A 'HandleSite' is a just reference to the actual handler of a specific method.
 Mostly for invoking 'hangup' on the handler, once it is no longer needed.
 -}
@@ -247,15 +299,9 @@ handle endpoint name method fn = do
     return $ HandleSite name task
     where
         handleCall = do
-            (caller,rid,args) <- selectMessage endpoint $ \msg -> do
-                case decode msg of
-                    Left _ -> Nothing
-                    Right (Request rid caller rmethod args) -> do
-                        if rmethod == method
-                            then Just (caller,rid,args)
-                            else Nothing
+            (args,reply) <- hear endpoint name method
             result <- fn args
-            sendMessage_ endpoint caller $ encode $ Response rid name result
+            reply result
             handleCall
 
 {-|

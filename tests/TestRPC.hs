@@ -25,6 +25,7 @@ import Network.Transport.Memory
 -- external imports
 
 import Control.Concurrent
+import Control.Concurrent.Async
 
 import qualified Data.Map as M
 
@@ -40,12 +41,29 @@ _log = "test.rpc"
 
 tests :: [Test.Framework.Test]
 tests = [
+    testCase "call-one-hear" testOneHear,
     testCase "call-one-handler" testOneHandler,
     testCase "call-two-handlers" testTwoHandlers,
     testCase "gcall-three-handlers" testGroupCall,
     testCase "call-one-with-timeout" testOneHandlerWithTimeout,
     testCase "gcall-three-handlers-with-timeout"testGroupCallWithTimeout
   ]
+
+testOneHear :: Assertion
+testOneHear = do
+    let name1 = "endpoint1"
+        name2 = "endpoint2"
+    transport <- newMemoryTransport
+    endpoint1 <- newEndpoint [transport]
+    endpoint2 <- newEndpoint [transport]
+    Right () <- bindEndpoint endpoint1 name1
+    Right () <- bindEndpoint endpoint2 name2
+    _ <- async $ do
+        (msg,reply) <- hear endpoint2 name2 "foo"
+        reply $ msg ++ "!"
+    let cs = newCallSite endpoint1 name1
+    result <- call cs name2 "foo" "hello"
+    assertEqual "Result not expected value" "hello!" result
 
 testOneHandler :: Assertion
 testOneHandler = do

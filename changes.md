@@ -1,8 +1,17 @@
+0.1.0.10
+
+    * Added hear primitive as one-shot counterpart to call.  While handle
+    may be generally useful for many applications as it fully encapsulates repeated
+    handling of incoming requests, hear adds the ability to wait for a single
+    incoming request. Hear also returns a function of type Reply suitable for sending
+    a single response to the caller. Being more low-level in nature, some applications
+    find direct use of hear more flexible than the higher-level handle construct.
+
 0.1.0.9
 
     * Added HelloWorld example, and updated code sample in documentation to reflect
       working with the current API
-      
+
     * Early implementation of synchronous RPCs on top of endpoints, with basic unit tests.
       Both single and group RPCs are implemented, as are calls with definite and indefinite
       waits for responses.
@@ -10,7 +19,7 @@
     * Removed dependency on network-simple
 
     * Improved documentation throughout.
-      
+
 0.1.0.8
 
  * Enabled selective out of order mesage reception, by using a Mailbox, an extension of STM's
