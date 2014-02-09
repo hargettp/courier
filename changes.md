@@ -7,6 +7,12 @@
     a single response to the caller. Being more low-level in nature, some applications
     find direct use of hear more flexible than the higher-level handle construct.
 
+    * Fixed a mistake in 0.1.0.9 where RPCs where supposed to have unique identifiers
+    for matching up a call with a response.  The value was never computed, when it
+    should have been a random value for every call, so that responses could be matched
+    with their originating request.  Now using Data.UUID.V4 to generate unique identifiers
+    for each request; dependency added in cabal.
+
 0.1.0.9
 
     * Added HelloWorld example, and updated code sample in documentation to reflect

@@ -64,7 +64,8 @@ library
                        hslogger,
                        network,
                        stm,
-                       text
+                       text,
+                       uuid
 
 Test-Suite test-courier
     type: exitcode-stdio-1.0

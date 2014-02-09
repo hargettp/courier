@@ -66,14 +66,19 @@ import Control.Monad
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Serialize
+import Data.UUID
+import Data.UUID.V4
+import Data.Word
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
 type Method = String
 
+type RequestId = (Word32, Word32, Word32, Word32)
+
 data Request a = (Serialize a) => Request {
-    requestId :: String,
+    requestId :: RequestId,
     requestCaller :: Name,
     requestMethod :: Method,
     requestArgs :: a
@@ -93,7 +98,7 @@ instance (Serialize a) => Serialize (Request a) where
         return $ Request rid caller method args
 
 data Response b = (Serialize b) => Response {
-    responseId :: String,
+    responseId :: RequestId,
     responseFrom :: Name,
     responseValue :: b
 }
@@ -130,7 +135,8 @@ the caller will wait until a matching response is received.
 -}
 call :: (Serialize a, Serialize b) => CallSite -> Name -> Method -> a -> IO  b
 call (CallSite endpoint from) name method args = do
-    let req = Request {requestId = "",requestCaller = from,requestMethod = method, requestArgs = args}
+    ruuid <- nextRandom
+    let req = Request {requestId = toWords ruuid,requestCaller = from,requestMethod = method, requestArgs = args}
     sendMessage_ endpoint name $ encode req
     selectMessage endpoint $ \msg -> do
         case decode msg of
@@ -164,7 +170,8 @@ the caller will wait until all matching responses are received.
 -}
 gcall :: (Serialize a, Serialize b) => CallSite -> [Name] -> Method -> a -> IO (M.Map Name b)
 gcall (CallSite endpoint from) names method args = do
-    let req = Request {requestId = "",requestCaller = from,requestMethod = method, requestArgs = args}
+    ruuid <- nextRandom
+    let req = Request {requestId = toWords ruuid,requestCaller = from,requestMethod = method, requestArgs = args}
     sendAll req
     recvAll req M.empty
     where
@@ -198,7 +205,8 @@ if a response was received.
 -}
 gcallWithTimeout :: (Serialize a, Serialize b) => CallSite -> [Name] -> Method -> Int -> a -> IO (M.Map Name (Maybe b))
 gcallWithTimeout (CallSite endpoint from) names method delay args = do
-    let req = Request {requestId = "",requestCaller = from,requestMethod = method, requestArgs = args}
+    ruuid <- nextRandom
+    let req = Request {requestId = toWords ruuid,requestCaller = from,requestMethod = method, requestArgs = args}
     sendAll req
     allResults <- atomically $ newTVar M.empty
     responses <- race (recvAll req allResults) (threadDelay delay)
@@ -246,6 +254,10 @@ Wait for a single incoming request to invoke the indicated 'Method' on the speci
 the reply.  A good pattern for using 'hear' will pattern match the result to a tuple of
 the form @(args,reply)@, then use the args as needed to compute a result, and then
 finally send the result back to the client by simply passing the result to reply: @reply result@.
+
+The invoker of 'hear' must supply the 'Name' they have bound to the 'Endpoint', as this
+helps the original requestor of the RPC differentiate responses when the RPC was a group
+call.
 -}
 hear :: (Serialize a,Serialize b) => Endpoint -> Name -> Method -> IO (a,Reply b)
 hear endpoint name method = do
