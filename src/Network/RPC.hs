@@ -1,4 +1,5 @@
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE DeriveGeneric #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Network.RPC
@@ -70,10 +71,16 @@ import Data.UUID
 import Data.UUID.V4
 import Data.Word
 
+import GHC.Generics hiding (from)
+
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
 type Method = String
+
+data RPCMessageType = Req | Rsp deriving (Eq,Show,Enum,Generic)
+
+instance Serialize RPCMessageType
 
 type RequestId = (Word32, Word32, Word32, Word32)
 
@@ -86,11 +93,13 @@ data Request a = (Serialize a) => Request {
 
 instance (Serialize a) => Serialize (Request a) where 
     put req = do
+        put Req
         put $ requestId req
         put $ requestCaller req
         put $ requestMethod req
         put $ requestArgs req
     get = do
+        Req <- get
         rid <- get
         caller <- get
         method <- get
@@ -105,11 +114,13 @@ data Response b = (Serialize b) => Response {
 
 instance (Serialize b) => Serialize (Response b) where
     put rsp = do
+        put Rsp
         put $ responseId rsp
         put $ responseFrom rsp
         put $ responseValue rsp
 
     get = do
+        Rsp <- get
         rid <- get
         from <- get
         val <- get
@@ -130,7 +141,7 @@ newCallSite = CallSite
 
 {-|
 Call a method with the provided arguments on the recipient with the given name.
-A request will be made through the 'CallSite''s 'Endpoint', and then
+
 the caller will wait until a matching response is received.
 -}
 call :: (Serialize a, Serialize b) => CallSite -> Name -> Method -> a -> IO  b

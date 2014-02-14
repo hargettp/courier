@@ -1,3 +1,10 @@
+0.1.0.11
+
+    * Improvements to RPC. Previously, it was not possible to differentiate correctly
+    between requests and responses in the same mailbox: the only check was that
+    deserialization succeeded, which wasn't a sufficient test, and it would be possible
+    to deserialize a response as a request, etc.  This lead to spurious errors.
+
 0.1.0.10
 
     * Added hear primitive as one-shot counterpart to call.  While handle
