@@ -13,6 +13,12 @@
     with their originating request.  Now using Data.UUID.V4 to generate unique identifiers
     for each request; dependency added in cabal.
 
+    * Unit tests on OS X 10.9 unreliable again, with both ghc 7.6.3 and ghc 7.8.1 (rc1)
+
+    * Unit tests passing on Ubuntu 12.04 LTS AMD64 ghc 7.6.3
+
+    * Unit tests passing on FP Complete with 7.8 preview compiler
+
 0.1.0.9
 
     * Added HelloWorld example, and updated code sample in documentation to reflect
