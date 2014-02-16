@@ -11,7 +11,7 @@ description:         Inspired by Erlang's simple message-passing facilities, cou
                      (especially for distributed applications) depend upon a message-passing foundation,
                      but the algorithms are sufficiently complex that the details of how those messages
                      are transmitted among nodes are best hidden away and solved separately from
-                     the distributed algorithm itself.  With this in mind, this pacakge aims
+                     the distributed algorithm itself.  With this in mind, this package aims
                      to provide a variety of transports as well as support for common communication
                      idioms (e.g., in order message delivery, selective out of order message delivery,
                      synchronous RPC, etc.). 
