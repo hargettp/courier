@@ -35,7 +35,8 @@ tests = [
     testCase "mbox-creation" testCreation,
     testCase "mbox-simple-write" testSimpleWrite,
     testCase "mbox-write-read" testWriteRead,
-    testCase "mbox-match" testMatch
+    testCase "mbox-match" testMatch,
+    testCase "mbox-find" testFind
   ]
 
 testCreation :: Assertion
@@ -77,3 +78,30 @@ testMatch = do
     where
         expectHello mbox = selectMailbox mbox (\msg ->  if msg == "hello!" then Just msg else Nothing)
         expectBonjour mbox = selectMailbox mbox (\msg ->  if msg == "bonjour!" then Just msg else Nothing)
+
+testFind :: Assertion
+testFind = do
+    mbox <- atomically $ newMailbox
+    atomically $ writeMailbox mbox "hello!"
+    results1 <- race (atomically $ expectHello mbox)
+        (threadDelay 1000000)
+    case results1 of
+        Left _ -> return ()
+        Right _ -> assertFailure "Did not find expected message"
+    atomically $ writeMailbox mbox "bonjour!"
+    results2 <- race (atomically $ expectHello mbox)
+        (threadDelay 1000000)
+    case results2 of
+        Left _ -> return ()
+        Right _ -> assertFailure "Did not find expected message"
+    results3 <- atomically $ useHello mbox
+    assertBool "Expected hello!" (results3 == "hello!")
+    results4 <- race (atomically $ expectHello mbox)
+        (atomically $ expectBonjour mbox)
+    case results4 of
+        Left _ -> assertFailure "Did not receive expected message"
+        Right _ -> return ()
+    where
+        useHello mbox = selectMailbox mbox (\msg ->  if msg == "hello!" then Just msg else Nothing)
+        expectHello mbox = findMailbox mbox (\msg ->  if msg == "hello!" then Just msg else Nothing)
+        expectBonjour mbox = findMailbox mbox (\msg ->  if msg == "bonjour!" then Just msg else Nothing)

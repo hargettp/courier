@@ -4,6 +4,10 @@
     between requests and responses in the same mailbox: the only check was that
     deserialization succeeded, which wasn't a sufficient test, and it would be possible
     to deserialize a response as a request, etc.  This lead to spurious errors.
+    * Added functions for detecting presence of messages in an an endpoint's mailbox
+    (while still leaving them unconsumed): mostly added this for applications that
+    need to react to the presence of a particular message, but not actual consume
+    such messages.
 
 0.1.0.10
 

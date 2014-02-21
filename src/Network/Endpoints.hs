@@ -44,6 +44,8 @@ module Network.Endpoints (
   -- * Selective message reception
   selectMessage,
   selectMessageTimeout,
+  detectMessage,
+  detectMessageTimeout,
   dispatchMessage,
   dispatchMessageTimeout,
   
@@ -272,6 +274,30 @@ but returns @Nothing@ if no message available before the timeout occurred. Like
 selectMessageTimeout :: Endpoint -> Int -> (Message -> Maybe v) -> IO (Maybe v)
 selectMessageTimeout endpoint delay testFn = do
   resultOrTimeout <- race (selectMessage endpoint testFn) (threadDelay delay)
+  case resultOrTimeout of
+    Left result -> return $ Just result
+    Right () -> return Nothing
+
+{-|
+Find a 'Message' in the 'Endpoint' 'Mailbox' matching the supplied
+test function, or block until one is available.  Note that any such message
+is left in the mailbox, and thus repeated calls to this function could find the
+message if it is not consumed immediately.
+-}
+detectMessage :: Endpoint -> (Message -> Maybe v) -> IO v
+detectMessage endpoint testFn = do
+    msg <- atomically $ findMailbox (endpointMailbox endpoint) testFn
+    return msg
+
+{-|
+Find a 'Message' in the 'Endpoint' 'Mailbox' matching the supplied
+test function, or block until either one is available or the timeout expires.
+Note that any such message is left in the mailbox, and thus repeated calls
+to this function could find the message if it is not consumed immediately.
+-}
+detectMessageTimeout :: Endpoint -> Int -> (Message -> Maybe v) -> IO (Maybe v)
+detectMessageTimeout endpoint delay testFn = do
+  resultOrTimeout <- race (detectMessage endpoint testFn) (threadDelay delay)
   case resultOrTimeout of
     Left result -> return $ Just result
     Right () -> return Nothing
