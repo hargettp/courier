@@ -87,4 +87,10 @@ cabal install --only-dependencies
 cabal install
 ```
 
-Successfully installed on both Linux 12.04 AMD64 and Mac OS X Mount Lion, using GHC 7.6.3.
+Successfully installed on both Linux 12.04 AMD64 and Mac OS X Mount Lion , using GHC 7.6.3.
+
+TODO
+
+ * Ensure that new transports can be defined outside of the courier package and used with courier endpoints
+ * Add IPv6 protocols
+ * Consider adding support for RAW sockets
