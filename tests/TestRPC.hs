@@ -28,6 +28,7 @@ import Control.Concurrent
 import Control.Concurrent.Async
 
 import qualified Data.Map as M
+import Data.Serialize
 
 import Test.Framework
 import Test.HUnit
@@ -59,10 +60,12 @@ testOneHear = do
     Right () <- bindEndpoint endpoint1 name1
     Right () <- bindEndpoint endpoint2 name2
     _ <- async $ do
-        (msg,reply) <- hear endpoint2 name2 "foo"
-        reply $ msg ++ "!"
+        (bytes,reply) <- hear endpoint2 name2 "foo"
+        let Right msg = decode bytes
+        reply $ encode $ msg ++ "!"
     let cs = newCallSite endpoint1 name1
-    result <- call cs name2 "foo" "hello"
+    bytes <- call cs name2 "foo" $ encode "hello"
+    let Right result = decode bytes
     assertEqual "Result not expected value" "hello!" result
 
 testOneHandler :: Assertion
@@ -74,10 +77,12 @@ testOneHandler = do
     endpoint2 <- newEndpoint [transport]
     Right () <- bindEndpoint endpoint1 name1
     Right () <- bindEndpoint endpoint2 name2
-    h <- handle endpoint2 name2 "foo" $ \msg ->
-        return $ msg ++ "!"
+    h <- handle endpoint2 name2 "foo" $ \bytes ->
+        let Right msg = decode bytes
+        in return $ encode $ msg ++ "!"
     let cs = newCallSite endpoint1 name1
-    result <- call cs name2 "foo" "hello"
+    bytes <- call cs name2 "foo" $ encode "hello"
+    let Right result = decode bytes
     assertEqual "Result not expected value" "hello!" result
     hangup h
 
@@ -90,14 +95,18 @@ testTwoHandlers = do
     endpoint2 <- newEndpoint [transport]
     Right () <- bindEndpoint endpoint1 name1
     Right () <- bindEndpoint endpoint2 name2
-    h1 <- handle endpoint2 name2 "foo" $ \msg ->
-        return $ msg ++ "!"
-    h2 <- handle endpoint2 name2 "bar" $ \msg ->
-        return $ msg ++ "?"
+    h1 <- handle endpoint2 name2 "foo" $ \bytes ->
+        let Right msg = decode bytes
+        in return $ encode $ msg ++ "!"
+    h2 <- handle endpoint2 name2 "bar" $ \bytes ->
+        let Right msg = decode bytes
+        in return $ encode $ msg ++ "?"
     let cs = newCallSite endpoint1 name1
-    result1 <- call cs name2 "foo" "hello"
+    bytes1 <- call cs name2 "foo" $ encode "hello"
+    let Right result1 = decode bytes1
     assertEqual "Result not expected value" "hello!" result1
-    result2 <- call cs name2 "bar" "hello"
+    bytes2 <- call cs name2 "bar" $ encode "hello"
+    let Right result2 = decode bytes2
     assertEqual "Result not expected value" "hello?" result2
     hangup h1
     hangup h2
@@ -117,14 +126,17 @@ testGroupCall = do
     Right () <- bindEndpoint endpoint2 name2
     Right () <- bindEndpoint endpoint3 name3
     Right () <- bindEndpoint endpoint4 name4
-    h2 <- handle endpoint2 name2 "foo" $ \msg -> if msg == "hello" then return "foo" else return ""
-    h3 <- handle endpoint3 name3 "foo" $ \msg -> if msg == "hello" then return "bar" else return ""
-    h4 <- handle endpoint4 name4 "foo" $ \msg -> if msg == "hello" then return "baz" else return ""
+    h2 <- handle endpoint2 name2 "foo" $ \bytes -> let Right msg = decode bytes in
+                                                      return $ encode $ if msg == "hello" then "foo" else ""
+    h3 <- handle endpoint3 name3 "foo" $ \bytes -> let Right msg = decode bytes in
+                                                       return $ encode $ if msg == "hello" then "bar" else ""
+    h4 <- handle endpoint4 name4 "foo" $ \bytes -> let Right msg = decode bytes in
+                                                       return $ encode $ if msg == "hello" then "baz" else ""
     let cs = newCallSite endpoint1 name1
-    results <- (gcall cs [name2,name3,name4] "foo" "hello") :: IO (M.Map Name String)
-    assertBool "Foo not present in results" (elem "foo" $ M.elems results)
-    assertBool "Bar not present in results" (elem "bar" $ M.elems results)
-    assertBool "Bar not present in results" (elem "baz" $ M.elems results)
+    results <- (gcall cs [name2,name3,name4] "foo" $ encode "hello")
+    assertBool "Foo not present in results" (elem (encode "foo") $ M.elems results)
+    assertBool "Bar not present in results" (elem (encode "bar") $ M.elems results)
+    assertBool "Bar not present in results" (elem (encode "baz") $ M.elems results)
     assertEqual "Unxpected number of results" 3 (M.size results)
     hangup h2
     hangup h3
@@ -142,20 +154,23 @@ testOneHandlerWithTimeout = do
     Right () <- bindEndpoint endpoint1 name1
     Right () <- bindEndpoint endpoint2 name2
     -- first call with caller waiting longer than handler
-    h1 <- handle endpoint2 name2 "foo" $ \msg -> do
+    h1 <- handle endpoint2 name2 "foo" $ \bytes -> do
+        let Right msg = decode bytes
         threadDelay shorter
-        return $ msg ++ "!"
+        return $ encode $ msg ++ "!"
     let cs1 = newCallSite endpoint1 name1
-    result1 <- callWithTimeout cs1 name2 "foo" longer "hello"
-    assertEqual "Result not expected value" (Just "hello!") result1
+    Just bytes1 <- callWithTimeout cs1 name2 "foo" longer $ encode "hello"
+    let Right result1 = decode bytes1
+    assertEqual "Result not expected value" (Just "hello!") (Just result1)
     hangup h1
     -- now call with handler waiting longer than caller
-    h2 <- handle endpoint2 name2 "foo" $ \msg -> do
+    h2 <- handle endpoint2 name2 "foo" $ \bytes -> do
+        let Right msg = decode bytes
         threadDelay longer
-        return $ msg ++ "!"
+        return $ encode $ msg ++ "!"
     let cs2 = newCallSite endpoint1 name1
-    result2 <- (callWithTimeout cs2 name2 "foo" shorter "hello") :: IO (Maybe String)
-    assertEqual "Result not expected value" Nothing result2
+    bytes2 <- (callWithTimeout cs2 name2 "foo" shorter $ encode "hello")
+    assertEqual "Result not expected value" Nothing bytes2
     hangup h2
 
 testGroupCallWithTimeout :: Assertion
@@ -176,19 +191,22 @@ testGroupCallWithTimeout = do
     Right () <- bindEndpoint endpoint2 name2
     Right () <- bindEndpoint endpoint3 name3
     Right () <- bindEndpoint endpoint4 name4
-    h2 <- handle endpoint2 name2 "foo" $ \msg -> do
+    h2 <- handle endpoint2 name2 "foo" $ \bytes -> do
+        let Right msg = decode bytes
         threadDelay shorter
-        if msg == "hello" then return "foo" else return ""
-    h3 <- handle endpoint3 name3 "foo" $ \msg ->  do
+        return $ encode $ if msg == "hello" then "foo" else ""
+    h3 <- handle endpoint3 name3 "foo" $ \bytes ->  do
         threadDelay shorter
-        if msg == "hello" then return "bar" else return ""
-    h4 <- handle endpoint4 name4 "foo" $ \msg ->  do
+        let Right msg = decode bytes
+        return $ encode $ if msg == "hello" then "bar" else ""
+    h4 <- handle endpoint4 name4 "foo" $ \bytes ->  do
         threadDelay longest
-        if msg == "hello" then return "baz" else return ""
+        let Right msg = decode bytes
+        return $ encode $ if msg == "hello" then "baz" else ""
     let cs = newCallSite endpoint1 name1
-    results <- gcallWithTimeout cs [name2,name3,name4] "foo" longer "hello"
-    assertEqual "Foo not present in results" (Just $ Just "foo") (M.lookup name2 results)
-    assertEqual "Bar not present in results" (Just $ Just "bar") (M.lookup name3 results)
+    results <- gcallWithTimeout cs [name2,name3,name4] "foo" longer $ encode "hello"
+    assertEqual "Foo not present in results" (Just $ Just $ encode "foo") (M.lookup name2 results)
+    assertEqual "Bar not present in results" (Just $ Just $ encode "bar") (M.lookup name3 results)
     assertEqual "Baz shouldn't be present in results" (Just $ Nothing) (M.lookup name4 results)
     assertEqual "Unxpected number of results" 3 (M.size results)
     hangup h2

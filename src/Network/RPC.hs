@@ -84,14 +84,14 @@ instance Serialize RPCMessageType
 
 type RequestId = (Word32, Word32, Word32, Word32)
 
-data Request a = (Serialize a) => Request {
+data Request = Request {
     requestId :: RequestId,
     requestCaller :: Name,
     requestMethod :: Method,
-    requestArgs :: a
+    requestArgs :: Message
 }
 
-instance (Serialize a) => Serialize (Request a) where 
+instance Serialize Request where
     put req = do
         put Req
         put $ requestId req
@@ -106,13 +106,13 @@ instance (Serialize a) => Serialize (Request a) where
         args <- get
         return $ Request rid caller method args
 
-data Response b = (Serialize b) => Response {
+data Response = Response {
     responseId :: RequestId,
     responseFrom :: Name,
-    responseValue :: b
+    responseValue :: Message
 }
 
-instance (Serialize b) => Serialize (Response b) where
+instance Serialize Response where
     put rsp = do
         put Rsp
         put $ responseId rsp
@@ -144,7 +144,7 @@ Call a method with the provided arguments on the recipient with the given name.
 
 the caller will wait until a matching response is received.
 -}
-call :: (Serialize a, Serialize b) => CallSite -> Name -> Method -> a -> IO  b
+call :: CallSite -> Name -> Method -> Message -> IO Message
 call (CallSite endpoint from) name method args = do
     ruuid <- nextRandom
     let req = Request {requestId = toWords ruuid,requestCaller = from,requestMethod = method, requestArgs = args}
@@ -165,7 +165,7 @@ is received within the provided timeout (measured in microseconds), then
 return the value wrapped in 'Just'; otherwise, if the timeout expires
 before the call returns, then return 'Nothing.
 -}
-callWithTimeout :: (Serialize a, Serialize b) => CallSite -> Name -> Method -> Int-> a -> IO  (Maybe b)
+callWithTimeout :: CallSite -> Name -> Method -> Int-> Message -> IO  (Maybe Message)
 callWithTimeout site name method delay args = do
     resultOrTimeout <- race callIt (threadDelay delay)
     case resultOrTimeout of
@@ -179,7 +179,7 @@ Group call or RPC: call a method with the provided arguments on all the recipien
 A request will be made through the 'CallSite''s 'Endpoint', and then
 the caller will wait until all matching responses are received.
 -}
-gcall :: (Serialize a, Serialize b) => CallSite -> [Name] -> Method -> a -> IO (M.Map Name b)
+gcall :: CallSite -> [Name] -> Method -> Message -> IO (M.Map Name Message)
 gcall (CallSite endpoint from) names method args = do
     ruuid <- nextRandom
     let req = Request {requestId = toWords ruuid,requestCaller = from,requestMethod = method, requestArgs = args}
@@ -214,7 +214,7 @@ The returned 'M.Map' has a key for every 'Name' that was a target of the call, a
 of that key will be @Nothing@ if no response was received before the timeout, or @Just value@
 if a response was received.
 -}
-gcallWithTimeout :: (Serialize a, Serialize b) => CallSite -> [Name] -> Method -> Int -> a -> IO (M.Map Name (Maybe b))
+gcallWithTimeout :: CallSite -> [Name] -> Method -> Int -> Message -> IO (M.Map Name (Maybe Message))
 gcallWithTimeout (CallSite endpoint from) names method delay args = do
     ruuid <- nextRandom
     let req = Request {requestId = toWords ruuid,requestCaller = from,requestMethod = method, requestArgs = args}
@@ -236,7 +236,7 @@ gcallWithTimeout (CallSite endpoint from) names method delay args = do
                         if (rid == (requestId req)) && (elem name names)
                             then Just (name,value)
                             else Nothing
-        recvAll :: (Serialize b) => Request a -> TVar (M.Map Name b) -> IO (M.Map Name b)
+        recvAll :: Request -> TVar (M.Map Name Message) -> IO (M.Map Name Message)
         recvAll req allResults = do
             (replier,result) <- recv req
             newResults <- atomically $ do
@@ -270,7 +270,7 @@ The invoker of 'hear' must supply the 'Name' they have bound to the 'Endpoint', 
 helps the original requestor of the RPC differentiate responses when the RPC was a group
 call.
 -}
-hear :: (Serialize a,Serialize b) => Endpoint -> Name -> Method -> IO (a,Reply b)
+hear :: Endpoint -> Name -> Method -> IO (Message,Reply Message)
 hear endpoint name method = do
     (caller,rid,args) <- selectMessage endpoint $ \msg -> do
                 case decode msg of
@@ -290,7 +290,7 @@ Same as 'hear', except return 'Nothing' if no request received within the specif
 timeout (measured in microseconds), or return a 'Just' instance containing both the
 method arguments and a 'Reply' function useful for sending the reply.
 -}
-hearTimeout :: (Serialize a,Serialize b) => Endpoint -> Name -> Method -> Int -> IO (Maybe (a,Reply b))
+hearTimeout :: Endpoint -> Name -> Method -> Int -> IO (Maybe (Message,Reply Message))
 hearTimeout endpoint name method timeout = do
     req <- selectMessageTimeout endpoint timeout $ \msg -> do
                 case decode msg of
@@ -316,7 +316,7 @@ data HandleSite = HandleSite Name (Async ())
 Handle all RPCs to invoke the indicated 'Method' on the specified 'Endpoint',
 until 'hangup' is called on the returned 'HandleSite'.
 -}
-handle :: (Serialize a, Serialize b) => Endpoint -> Name -> Method -> (a -> IO b) -> IO HandleSite
+handle :: Endpoint -> Name -> Method -> (Message -> IO Message) -> IO HandleSite
 handle endpoint name method fn = do
     task <- async $ handleCall
     return $ HandleSite name task

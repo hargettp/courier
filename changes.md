@@ -1,9 +1,22 @@
 0.1.0.11
 
+    * API breaking change: RPC functions no longer take / return instances of Serialize,
+    but they take / return Message values instead.  The reason for this change is that
+    while courier does use Serialize internally to simplify a variety of operations,
+    putting instances of Serialize in RPC functions was misleading: applications would
+    still need to take care to ensure that different RPC requests / responses could
+    be differentiated, otherwise courier might accidentally deserialize a message
+    to the wrong type at an application's request (e.g., inside a hear callback). This
+    can lead to decoding errors, which may actually causes exceptions to be thrown
+    in pure methods.  By leaving the interface to use Message values, its not only
+    consistent with the rest of Endpoint behavior, but it clarifies the responsibility
+    of the calling application to manage their Message payloads on their own.
+    
     * Improvements to RPC. Previously, it was not possible to differentiate correctly
     between requests and responses in the same mailbox: the only check was that
     deserialization succeeded, which wasn't a sufficient test, and it would be possible
     to deserialize a response as a request, etc.  This lead to spurious errors.
+    
     * Added functions for detecting presence of messages in an an endpoint's mailbox
     (while still leaving them unconsumed): mostly added this for applications that
     need to react to the presence of a particular message, but not actual consume
