@@ -22,6 +22,10 @@
     need to react to the presence of a particular message, but not actual consume
     such messages.
 
+    * Exposed the Request / Response types used by RPC.  Applications may benefit
+    from detecting them or otherwise manipulating them outside of normal RPC
+    flow, they are exposed here for that purpose.
+
 0.1.0.10
 
     * Added hear primitive as one-shot counterpart to call.  While handle

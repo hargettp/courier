@@ -49,7 +49,10 @@ module Network.RPC (
 
     HandleSite,
     handle,
-    hangup
+    hangup,
+
+    Request(..),
+    Response(..)
 
 ) where
 

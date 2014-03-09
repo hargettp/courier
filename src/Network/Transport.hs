@@ -14,6 +14,18 @@
 -- that specific 'Transport' implementations should provide in order to deliver messages
 -- for 'Endpoint's.
 --
+-- The definition of a transport is deliberately low-level in nature.  Unless a specific
+-- transport describes itself as supporting features like guaranteed delivery, applications
+-- should NOT assume that message delivery is reliable.
+--
+-- For example, if a sender sends a message to a name that has not yet been bound, then 
+-- immediately waits on the response for that message, then the application may hang, 
+-- as the original message may have been dropped.
+--
+-- However, many application may find it easier to push features such as reliable
+-- message delivery into a custom transport, leaving the application only having
+-- to concern itself with the messages being delivered rather than how they arrive.
+--
 -----------------------------------------------------------------------------
 
 module Network.Transport (

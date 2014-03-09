@@ -24,6 +24,7 @@ import Network.Transport.Memory
 
 -- external imports
 
+import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.Async
 
@@ -42,7 +43,9 @@ _log = "test.rpc"
 
 tests :: [Test.Framework.Test]
 tests = [
-    testCase "call-one-hear" testOneHear,
+    testCase "call-one-hear-call" testOneHearCall,
+    testCase "call-one-call-hear" testOneCallHear,
+    testCase "call-concurrent-call-hear" testConcurrentCallHear,
     testCase "call-one-handler" testOneHandler,
     testCase "call-two-handlers" testTwoHandlers,
     testCase "gcall-three-handlers" testGroupCall,
@@ -50,8 +53,8 @@ tests = [
     testCase "gcall-three-handlers-with-timeout"testGroupCallWithTimeout
   ]
 
-testOneHear :: Assertion
-testOneHear = do
+testOneHearCall :: Assertion
+testOneHearCall = do
     let name1 = "endpoint1"
         name2 = "endpoint2"
     transport <- newMemoryTransport
@@ -67,6 +70,54 @@ testOneHear = do
     bytes <- call cs name2 "foo" $ encode "hello"
     let Right result = decode bytes
     assertEqual "Result not expected value" "hello!" result
+
+testOneCallHear :: Assertion
+testOneCallHear = do
+    let name1 = "endpoint1"
+        name2 = "endpoint2"
+    transport <- newMemoryTransport
+    endpoint1 <- newEndpoint [transport]
+    endpoint2 <- newEndpoint [transport]
+    Right () <- bindEndpoint endpoint1 name1
+    Right () <- bindEndpoint endpoint2 name2
+    let cs = newCallSite endpoint1 name1
+    acall <- async $ call cs name2 "foo" $ encode "hello"
+    _ <- async $ do
+        (bytes,reply) <- hear endpoint2 name2 "foo"
+        let Right msg = decode bytes
+        reply $ encode $ msg ++ "!"
+    bytes <- wait acall
+    let Right result = decode bytes
+    assertEqual "Result not expected value" "hello!" result
+
+testConcurrentCallHear :: Assertion
+testConcurrentCallHear = do
+    let name1 = "endpoint1"
+        name2 = "endpoint2"
+    transport <- newMemoryTransport
+    endpoint1 <- newEndpoint [transport]
+    endpoint2 <- newEndpoint [transport]
+    Right () <- bindEndpoint endpoint1 name1
+    Right () <- bindEndpoint endpoint2 name2
+    let cs1 = newCallSite endpoint1 name1
+        cs2 = newCallSite endpoint2 name2
+    let call1 = call cs1 name2 "foo" $ encode "hello"
+        hear1 = do
+            (bytes,reply) <- hear endpoint2 name2 "foo"
+            let Right msg = decode bytes
+            reply $ encode $ msg ++ "!"
+        call2 = call cs2 name1 "bar" $ encode "ciao"
+        hear2 = do
+            (bytes,reply) <- hear endpoint1 name1 "bar"
+            let Right msg = decode bytes
+            reply $ encode $ msg ++ "!"
+    (result1,(),result2,()) <- runConcurrently $ (,,,)
+        <$> Concurrently call1
+        <*> Concurrently hear1
+        <*> Concurrently call2
+        <*> Concurrently hear2
+    assertEqual "Result not expected value" (Right "hello!") (decode result1)
+    assertEqual "Result not expected value" (Right "ciao!")  (decode result2)
 
 testOneHandler :: Assertion
 testOneHandler = do
