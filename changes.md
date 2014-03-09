@@ -1,3 +1,7 @@
+0.1.0.12
+
+    * TBD
+
 0.1.0.11
 
     * API breaking change: RPC functions no longer take / return instances of Serialize,
