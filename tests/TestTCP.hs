@@ -24,10 +24,10 @@ _log :: String
 _log = "test.transport.tcp"
 
 address1 :: Address
-address1 = "localhost:2001"
+address1 = "localhost:20001"
 
 address2 :: Address
-address2 = "localhost:2002"
+address2 = "localhost:20002"
 
 tests :: [Test.Framework.Test]
 tests =
