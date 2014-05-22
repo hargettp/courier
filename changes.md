@@ -1,6 +1,11 @@
 0.1.0.12
 
-    * TBD
+    * Fixed a long-standing issue concerning inconsistent failures. Turns out, on operating
+    systems with both IPv4 and IPv6 support, the TCP and UDP transports (which were really
+    only intended to be IPv4 for now) were not properly finding IPv4 addresses--in some
+    cases, IPv6 were being used instead, resulting in errors.  Both TCP and UDP now
+    pass (IPv4 only, of course), and in the future, IPv6 versions of these transports
+    will be added.
 
 0.1.0.11
 
