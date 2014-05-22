@@ -80,7 +80,7 @@ newTCPTransport resolver = do
       handles = tcpHandles transport,
       bind = tcpBind transport sockets,
       sendTo = socketSendTo transport,
-      shutdown = tcpShutdown transport
+      shutdown = tcpShutdown transport sockets
       }
 
 tcpHandles :: SocketTransport -> Name -> IO Bool
@@ -169,9 +169,16 @@ newTCPConnection address = do
     connConnect = do
         socket <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
         sockAddrs <- NS.getAddrInfo 
-                            (Just NS.defaultHints {NS.addrFlags = [NS.AI_NUMERICSERV]}) (Just host) (Just port)
-        NS.connect socket $ NS.addrAddress $ head sockAddrs
-        atomically $ putTMVar sock socket
+                            (Just NS.defaultHints {NS.addrFlags = [NS.AI_NUMERICSERV,NS.AI_ADDRCONFIG]}) (Just host) (Just port)
+        let ipv4Addrs = filter (\sockAddr ->
+                                 (NS.addrFamily sockAddr == NS.AF_INET)
+                                 && (NS.addrSocketType sockAddr == NS.Stream))
+                        sockAddrs
+        infoM _log $ "Socket addresses are " ++ (show sockAddrs)
+        infoM _log $ "IPv4 addresses are " ++ (show ipv4Addrs)
+        infoM _log $ "Initiating socket connection to " ++ (show $ head ipv4Addrs)
+        NS.connect socket $ NS.addrAddress $ head ipv4Addrs
+        infoM _log $ "Initiated socket connection to " ++ (show $ head ipv4Addrs)
         return socket,
     connSend = tcpSend address,
     connReceive = receiveSocketBytes,
@@ -213,8 +220,9 @@ tcpSend addr sock bs = do
     infoM _log $ "Message sent to" ++ (show addr)
 
 
-tcpShutdown :: SocketTransport -> IO ()
-tcpShutdown transport = do
+tcpShutdown :: SocketTransport -> SocketBindings -> IO ()
+tcpShutdown transport sockets = do
+  closeBindings sockets
   infoM _log $ "Closing messengers"
   msngrs <- atomically $ readTVar $ socketMessengers transport
   mapM_ closeMessenger $ M.elems msngrs

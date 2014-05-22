@@ -23,6 +23,7 @@ module Network.Transport.Sockets (
     SocketBindings,
     bindAddress,
     unbindAddress,
+    closeBindings,
 
     SocketTransport(..),
 
@@ -240,7 +241,7 @@ lookupAddresses hostAndPort =
         hints = defaultHints { addrFlags = [AI_ADDRCONFIG, AI_CANONNAME, AI_NUMERICSERV] }
     in do 
           addresses <- getAddrInfo (Just hints) (Just host) (Just port)
-          return $ map addrAddress addresses
+          return $ map addrAddress $ filter (\addrinfo -> addrFamily addrinfo == AF_INET) addresses
 
 lookupAddress :: (HostName,ServiceName) -> IO SockAddr
 lookupAddress hostAndPort = do
@@ -329,9 +330,12 @@ sender conn done mailbox = sendMessages
         else sendMessages
     reconnect = do
       -- TODO need a timeout here, in case connecting always fails
+      infoM _log $ "Reconnecting to " ++ (show $ connAddress conn)
       connected <- atomically $ tryReadTMVar $ connSocket conn
       case connected of
-        Just _ -> return ()
+        Just _ -> do
+          infoM _log $ "Reconnected to " ++ (show $ connAddress conn)
+          return ()
         Nothing -> do
           let (host,port) = parseSocketAddress $ connAddress conn
           infoM _log $ "Connecting to " ++ (show host) ++ ":" ++ (show port) -- (show address)
@@ -442,3 +446,10 @@ closeMessenger msngr = do
   cancel $ messengerReceiver msngr
   connClose $ messengerConnection msngr
   infoM _log $ "Closed messenger to " ++ (messengerAddress msngr)
+
+closeBindings :: SocketBindings -> IO ()
+closeBindings sockets = do
+  infoM _log $ "Closing bindings"
+  bindings <- atomically $ readTVar sockets
+  mapM_ (unbindAddress sockets)  $ M.keys bindings
+  infoM _log $ "Closed bindings"

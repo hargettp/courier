@@ -81,7 +81,7 @@ newUDPTransport resolver = do
       handles = udpHandles transport,
       bind = udpBind transport sockets,
       sendTo = socketSendTo transport,
-      shutdown = udpShutdown transport
+      shutdown = udpShutdown transport sockets
       }
 
 udpHandles :: SocketTransport -> Name -> IO Bool
@@ -102,7 +102,13 @@ udpBind transport sockets inc name = do
         addrinfos <- N.getAddrInfo
                         (Just (N.defaultHints {N.addrFlags = [N.AI_PASSIVE,N.AI_NUMERICSERV]}))
                         Nothing (Just port)
-        let serveraddr = head addrinfos
+        let ipv4Addrs = filter (\sockAddr ->
+                                 (N.addrFamily sockAddr == N.AF_INET)
+                                 && (N.addrSocketType sockAddr == N.Datagram))
+                        addrinfos
+        infoM _log $ "Socket addresses are " ++ (show addrinfos)
+        infoM _log $ "IPv4 addresses are " ++ (show ipv4Addrs)                        
+        let serveraddr = head ipv4Addrs
         sock <-  N.socket (N.addrFamily serveraddr) N.Datagram N.defaultProtocol
         -- have to set this option in case we frequently rebind sockets
         infoM _log $ "Binding to " ++ (show port) ++ " over UDP"
@@ -174,9 +180,10 @@ udpRecvFrom sock count = do
         then return Nothing
         else return $ Just bs
 
-udpShutdown :: SocketTransport -> IO ()
-udpShutdown transport = do
+udpShutdown :: SocketTransport -> SocketBindings -> IO ()
+udpShutdown transport sockets = do
   infoM _log $ "Unbinding transport"
+  closeBindings sockets
   infoM _log $ "Closing messengers"
   msngrs <- atomically $ readTVar $ socketMessengers transport
   mapM_ closeMessenger $ M.elems msngrs

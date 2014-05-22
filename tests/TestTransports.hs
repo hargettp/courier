@@ -216,5 +216,7 @@ verifiedSend :: String -> Endpoint -> Endpoint -> Name -> Name -> String -> Asse
 verifiedSend _log endpoint1 endpoint2 name1 name2 msg = do
   infoM _log $ "Sending message from " ++ name1 ++ " to " ++ name2
   sendMessage_ endpoint1 name2 $ encode msg
-  Just msg1 <- receiveMessageTimeout endpoint2 testDelay
-  assertEqual "Received message not same as sent" (Right msg) (decode msg1)
+  maybeMsg <- receiveMessageTimeout endpoint2 testDelay
+  case maybeMsg of
+    Nothing -> assertFailure "No message received"
+    Just msg1 -> assertEqual "Received message not same as sent" (Right msg) (decode msg1)

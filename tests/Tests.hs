@@ -6,9 +6,11 @@ import Network.Endpoints
 
 -- external imports
 
-import System.Directory
-import System.Log.Logger
+import System.IO
+import System.Log.Formatter
+import System.Log.Handler (setFormatter)
 import System.Log.Handler.Simple
+import System.Log.Logger
 
 import Test.Framework
 import Test.HUnit
@@ -31,14 +33,10 @@ main = do
 
 initLogging :: IO ()
 initLogging = do
-  let logFile = "tests.log"
-  exists <- doesFileExist logFile
-  if exists
-    then removeFile logFile
-    else return ()
-  s <- fileHandler logFile INFO
-  updateGlobalLogger rootLoggerName (setLevel WARNING)
-  updateGlobalLogger rootLoggerName (addHandler s)
+  s <- streamHandler stdout INFO
+  let fs = setFormatter s $ simpleLogFormatter "$time [$prio] - $msg"
+  updateGlobalLogger rootLoggerName (setLevel INFO)
+  updateGlobalLogger rootLoggerName $ setHandlers [fs]
 
 tests :: [Test.Framework.Test]
 tests =
