@@ -178,6 +178,7 @@ newTCPConnection address = do
         infoM _log $ "IPv4 addresses are " ++ (show ipv4Addrs)
         infoM _log $ "Initiating socket connection to " ++ (show $ head ipv4Addrs)
         NS.connect socket $ NS.addrAddress $ head ipv4Addrs
+        atomically $ putTMVar sock socket
         infoM _log $ "Initiated socket connection to " ++ (show $ head ipv4Addrs)
         return socket,
     connSend = tcpSend address,

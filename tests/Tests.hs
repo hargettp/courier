@@ -35,7 +35,7 @@ initLogging :: IO ()
 initLogging = do
   s <- streamHandler stdout INFO
   let fs = setFormatter s $ simpleLogFormatter "$time [$prio] - $msg"
-  updateGlobalLogger rootLoggerName (setLevel INFO)
+  updateGlobalLogger rootLoggerName (setLevel WARNING)
   updateGlobalLogger rootLoggerName $ setHandlers [fs]
 
 tests :: [Test.Framework.Test]
