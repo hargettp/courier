@@ -52,7 +52,7 @@ library
                   Control.Concurrent.Mailbox
                   Network.RPC
 
-  ghc-options: -Wall
+  ghc-options: -Wall -fno-state-hack
   other-modules:
                   Network.Transport.Sockets
                   Network.Transport.Internal
