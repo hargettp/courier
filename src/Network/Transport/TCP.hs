@@ -53,6 +53,12 @@ _log = "transport.tcp"
 tcpScheme :: Scheme
 tcpScheme = "tcp"
 
+lookupTCPAddress :: Address -> IO NS.SockAddr
+lookupTCPAddress address = lookupAddress NS.AF_INET NS.Stream address
+
+lookupWildcardTCPAddress :: Address -> IO NS.SockAddr
+lookupWildcardTCPAddress address = lookupWildcardAddress NS.AF_INET NS.Stream address
+
 {-|
 Create a new 'Transport' suitable for sending messages over TCP/IP.  There can
 be multiple instances of these 'Transport's: 'Network.Endpoints.Endpoint' using
@@ -107,14 +113,12 @@ tcpBind transport sockets inc name = do
     unbind = tcpUnbind address
     }
   where
-    tcpListen address sock = do 
+    tcpListen address sock = do
                 catchExceptions (do
-                        let (_,port) = parseSocketAddress address
-                        portnums <- NS.getAddrInfo 
-                            (Just NS.defaultHints {NS.addrFlags = [NS.AI_PASSIVE,NS.AI_NUMERICSERV]}) Nothing (Just port)
                         NS.setSocketOption sock NS.NoDelay 1
                         NS.setSocketOption sock NS.ReuseAddr 1
-                        NS.bind sock (NS.addrAddress $ head portnums)
+                        sockAddr <- lookupWildcardTCPAddress address
+                        NS.bind sock sockAddr
                         NS.listen sock 2048) -- TODO think about a configurable backlog
                     (\e -> do
                     warningM _log $ "Listen error on port " ++ address ++ ": " ++ (show (e :: SomeException))
@@ -162,24 +166,16 @@ tcpBind transport sockets inc name = do
 newTCPConnection :: Address -> IO Connection
 newTCPConnection address = do
   sock <- atomically $ newEmptyTMVar
-  let (host,port) = parseSocketAddress address
   return Connection {
     connAddress = address,
     connSocket = sock,
     connConnect = do
         socket <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
-        sockAddrs <- NS.getAddrInfo 
-                            (Just NS.defaultHints {NS.addrFlags = [NS.AI_NUMERICSERV,NS.AI_ADDRCONFIG]}) (Just host) (Just port)
-        let ipv4Addrs = filter (\sockAddr ->
-                                 (NS.addrFamily sockAddr == NS.AF_INET)
-                                 && (NS.addrSocketType sockAddr == NS.Stream))
-                        sockAddrs
-        infoM _log $ "Socket addresses are " ++ (show sockAddrs)
-        infoM _log $ "IPv4 addresses are " ++ (show ipv4Addrs)
-        infoM _log $ "Initiating socket connection to " ++ (show $ head ipv4Addrs)
-        NS.connect socket $ NS.addrAddress $ head ipv4Addrs
+        sockAddr <- lookupTCPAddress address
+        NS.connect socket sockAddr
+        -- NS.connect socket $ NS.addrAddress $ head ipv4Addrs
         atomically $ putTMVar sock socket
-        infoM _log $ "Initiated socket connection to " ++ (show $ head ipv4Addrs)
+        -- infoM _log $ "Initiated socket connection to " ++ (show $ head ipv4Addrs)
         return socket,
     connSend = tcpSend address,
     connReceive = receiveSocketBytes,

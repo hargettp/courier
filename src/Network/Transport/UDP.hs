@@ -45,7 +45,7 @@ import qualified Data.ByteString as B
 import qualified Data.Map as M
 import qualified Data.Set as S
 
-import qualified Network.Socket as N
+import qualified Network.Socket as NS
 import Network.Socket.ByteString(sendAllTo,recvFrom)
 
 import System.Log.Logger
@@ -59,6 +59,12 @@ _log = "transport.udp"
 
 udpScheme :: Scheme
 udpScheme = "udp"
+
+lookupUDPAddress :: Address -> IO NS.SockAddr
+lookupUDPAddress address = lookupAddress NS.AF_INET NS.Datagram address
+
+lookupWildcardUDPAddress :: Address -> IO NS.SockAddr
+lookupWildcardUDPAddress address = lookupWildcardAddress NS.AF_INET NS.Datagram address
 
 newUDPTransport :: Resolver -> IO Transport
 newUDPTransport resolver = do
@@ -98,23 +104,13 @@ udpBind transport sockets inc name = do
         M.insert name inc bindings
     Just address <- resolve (socketResolver transport) name
     bindAddress sockets address $ do
-        let (_,port) = parseSocketAddress address
-        addrinfos <- N.getAddrInfo
-                        (Just (N.defaultHints {N.addrFlags = [N.AI_PASSIVE,N.AI_NUMERICSERV]}))
-                        Nothing (Just port)
-        let ipv4Addrs = filter (\sockAddr ->
-                                 (N.addrFamily sockAddr == N.AF_INET)
-                                 && (N.addrSocketType sockAddr == N.Datagram))
-                        addrinfos
-        infoM _log $ "Socket addresses are " ++ (show addrinfos)
-        infoM _log $ "IPv4 addresses are " ++ (show ipv4Addrs)                        
-        let serveraddr = head ipv4Addrs
-        sock <-  N.socket (N.addrFamily serveraddr) N.Datagram N.defaultProtocol
+        sockaddr <- lookupWildcardUDPAddress address
+        sock <-  NS.socket NS.AF_INET NS.Datagram NS.defaultProtocol
         -- have to set this option in case we frequently rebind sockets
-        infoM _log $ "Binding to " ++ (show port) ++ " over UDP"
-        N.setSocketOption sock N.ReuseAddr 1
-        N.bindSocket sock $ N.addrAddress serveraddr
-        infoM _log $ "Bound to " ++ (show port) ++ " over UDP"
+        infoM _log $ "Binding to " ++ (show address) ++ " over UDP"
+        NS.setSocketOption sock NS.ReuseAddr 1
+        NS.bindSocket sock sockaddr
+        infoM _log $ "Bound to " ++ (show address) ++ " over UDP"
         rcvr <- async $ udpReceiveSocketMessages sock address (socketInbound transport)
         return (sock,rcvr)
     return $ Right Binding {
@@ -131,9 +127,9 @@ newUDPConnection address = do
   return Connection {
     connAddress = address,
     connSocket = sock,
-    connConnect = N.socket N.AF_INET N.Datagram N.defaultProtocol,
+    connConnect = NS.socket NS.AF_INET NS.Datagram NS.defaultProtocol,
     connSend = (\s bs -> do
-        addr <- lookupAddress $ parseSocketAddress address
+        addr <- lookupUDPAddress address
         infoM _log $ "Sending via UDP to " ++ (show addr)
         sendAllTo s bs addr
         infoM _log $ "Sent via UDP to " ++ (show addr)),
@@ -141,7 +137,7 @@ newUDPConnection address = do
     connClose = do
         maybeSocket <- atomically $ tryTakeTMVar sock
         case maybeSocket of
-            Just s -> N.sClose s
+            Just s -> NS.sClose s
             Nothing -> return ()
         return ()
     }
@@ -151,7 +147,7 @@ newUDPMessenger conn mailbox = do
     msngr <- newMessenger conn mailbox
     return msngr
 
-udpReceiveSocketMessages :: N.Socket -> Address -> Mailbox Message -> IO ()
+udpReceiveSocketMessages :: NS.Socket -> Address -> Mailbox Message -> IO ()
 udpReceiveSocketMessages sock addr mailbox = catchExceptions 
     (do
         infoM _log $ "Waiting to receive via UDP on " ++ (show addr)
@@ -159,7 +155,7 @@ udpReceiveSocketMessages sock addr mailbox = catchExceptions
         infoM _log $ "Received message via UDP on " ++ (show addr)
         case maybeMsg of
             Nothing -> do
-                N.sClose sock
+                NS.sClose sock
                 return ()
             Just msg -> do
                 atomically $ writeMailbox mailbox msg
@@ -172,7 +168,7 @@ udpReceiveSocketMessages sock addr mailbox = catchExceptions
             infoM _log $ "Received message"
             return maybeMsg
 
-udpRecvFrom :: N.Socket -> Int -> IO (Maybe B.ByteString)
+udpRecvFrom :: NS.Socket -> Int -> IO (Maybe B.ByteString)
 udpRecvFrom sock count = do
     (bs,addr) <- recvFrom sock count
     infoM _log $ "Received UDP message from " ++ (show addr) ++ ": " ++ (show bs)

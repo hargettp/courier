@@ -48,7 +48,8 @@ module Network.Transport.Sockets (
 
     parseSocketAddress,
     lookupAddresses,
-    lookupAddress
+    lookupAddress,
+    lookupWildcardAddress
 
   ) where
 
@@ -235,18 +236,26 @@ parseSocketAddress address =
              else h
     port p = p
 
-lookupAddresses :: (HostName,ServiceName) -> IO [SockAddr]
-lookupAddresses hostAndPort = 
-    let (host,port) = hostAndPort
+lookupAddresses :: Family -> SocketType -> Address -> IO [SockAddr]
+lookupAddresses family socketType address =
+    let (host,port) = parseSocketAddress address
         hints = defaultHints { addrFlags = [AI_ADDRCONFIG, AI_CANONNAME, AI_NUMERICSERV] }
-    in do 
+    in do
           addresses <- getAddrInfo (Just hints) (Just host) (Just port)
-          return $ map addrAddress $ filter (\addrinfo -> addrFamily addrinfo == AF_INET) addresses
+          return $ map addrAddress $ filter (\addrInfo -> addrFamily addrInfo == family && addrSocketType addrInfo == socketType) addresses
 
-lookupAddress :: (HostName,ServiceName) -> IO SockAddr
-lookupAddress hostAndPort = do
-    addresses <- lookupAddresses hostAndPort
+lookupAddress :: Family -> SocketType -> Address -> IO SockAddr
+lookupAddress family socketType address = do
+    addresses <- lookupAddresses family socketType address
     return $ addresses !! 0
+
+lookupWildcardAddress :: Family -> SocketType -> Address -> IO SockAddr
+lookupWildcardAddress family socketType address = do
+    sockAddr <- lookupAddress family socketType address
+    case sockAddr of
+        SockAddrInet port _ -> return $ SockAddrInet port iNADDR_ANY
+        SockAddrInet6 port flow _ scope -> return $ SockAddrInet6 port flow iN6ADDR_ANY scope
+        _ -> return sockAddr
 
 type SocketSend = Socket -> B.ByteString -> IO ()
 
