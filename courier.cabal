@@ -56,12 +56,11 @@ library
   other-modules:
                   Network.Transport.Sockets
                   Network.Transport.Internal
-  build-depends:       base >=4 && <5,
+  build-depends:       base >=4.6 && <5,
                        async,
                        bytestring,
                        cereal,
                        containers,
-                       ghc-prim,
                        hslogger,
                        network,
                        stm,
