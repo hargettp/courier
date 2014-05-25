@@ -1,6 +1,6 @@
 0.1.0.13
 
-    * TBD
+    * Explicitly removed support for 7.4; 7.6 now required.
 
 0.1.0.12
 
