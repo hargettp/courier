@@ -61,6 +61,7 @@ library
                        bytestring,
                        cereal,
                        containers,
+                       ghc-prim,
                        hslogger,
                        network,
                        stm,
