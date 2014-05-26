@@ -1,3 +1,7 @@
+0.1.0.14
+
+    * Included test source into tarball
+
 0.1.0.13
 
     * Explicitly removed support for 7.4; 7.6 now required.

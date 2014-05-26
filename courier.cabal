@@ -1,5 +1,5 @@
 name:                courier
-version:             0.1.0.13
+version:             0.1.0.14
 synopsis:           A message-passing library for simplifying network applications
 description:         Inspired by Erlang's simple message-passing facilities, courier provides roughly similar 
                      capabilities. Applications simply create one or more endpoints, 
@@ -25,6 +25,14 @@ description:         Inspired by Erlang's simple message-passing facilities, cou
                      
 extra-source-files:  changes.md
                      examples/HelloWorld.hs
+                     tests/Tests.hs
+                     tests/TestMailbox.hs
+                     tests/TestMemory.hs
+                     tests/TestRPC.hs
+                     tests/TestTCP.hs
+                     tests/TestTransports.hs
+                     tests/TestUDP.hs
+
 homepage:          http://github.com/hargettp/courier
 license:             MIT
 license-file:        LICENSE
