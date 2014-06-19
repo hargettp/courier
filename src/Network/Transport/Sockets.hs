@@ -26,6 +26,10 @@ module Network.Transport.Sockets (
     closeBindings,
 
     SocketTransport(..),
+    SocketConnectionFactory,
+    SocketMessengerFactory,
+    SocketBindingFactory,
+    newSocketTransport,
 
     Connection(..),
 
@@ -72,7 +76,7 @@ import qualified Data.Text as T
 
 import GHC.Generics
 
-import Network.Socket hiding (recv,socket)
+import Network.Socket hiding (recv,socket,bind,sendTo,shutdown)
 import qualified Network.Socket.ByteString as NSB
 
 import System.Log.Logger
@@ -83,6 +87,34 @@ import System.Log.Logger
 _log :: String
 _log = "transport.sockets"
 
+type SocketConnectionFactory = Address -> IO Connection
+type SocketMessengerFactory = Bindings -> Resolver -> Connection -> Mailbox Message -> IO Messenger
+type SocketBindingFactory = SocketTransport -> SocketBindings -> Mailbox Message -> Name -> IO (Either String Binding)
+
+newSocketTransport :: Resolver -> Scheme -> SocketBindingFactory -> SocketConnectionFactory -> SocketMessengerFactory -> IO Transport
+newSocketTransport resolver socketScheme binder connectionFactory messengerFactory = do
+  messengers <- atomically $ newTVar M.empty
+  bindings <- atomically $ newTVar M.empty
+  sockets <- newSocketBindings
+  inbound <- atomically $ newMailbox
+  dispatch <- async $ dispatcher bindings inbound
+  let transport = SocketTransport {
+        socketMessengers = messengers,
+        socketBindings = bindings,
+        socketConnection = connectionFactory,
+        socketMessenger = messengerFactory bindings resolver,
+        socketInbound = inbound,
+        socketDispatchers = S.fromList [dispatch],
+        socketResolver = resolver
+        }
+  return Transport {
+      scheme = socketScheme,
+      handles = socketTransportHandles transport,
+      bind = binder transport sockets,
+      sendTo = socketSendTo transport,
+      shutdown = socketTransportShutdown transport sockets
+      }
+
 type Bindings = TVar (M.Map Name (Mailbox Message))
 
 data SocketBinding = SocketBinding {
@@ -90,6 +122,14 @@ data SocketBinding = SocketBinding {
     socketSocket :: TMVar Socket,
     socketListener :: TMVar (Async ())
 }
+
+socketTransportHandles :: SocketTransport -> Name -> IO Bool
+socketTransportHandles transport name = do 
+  resolved <- resolve (socketResolver transport) name
+  return $ isJust resolved
+  where
+    isJust (Just _) = True
+    isJust _ = False
 
 type SocketBindings = TVar (M.Map Address SocketBinding)
 
@@ -100,7 +140,7 @@ bindAddress :: SocketBindings -> Address -> IO (Socket,Async ()) -> IO ()
 bindAddress bindings address factory = do
     (count,binding) <- atomically $ do
         bmap <- readTVar bindings
-        bndg <- case M.lookup address bmap of
+        binding <- case M.lookup address bmap of
             Nothing -> do
                 count <- newTVar 1
                 listener <- newEmptyTMVar
@@ -115,8 +155,8 @@ bindAddress bindings address factory = do
             Just binding -> do
                 modifyTVar (socketCount binding) $ \c -> c + 1
                 return binding
-        count <- readTVar $ socketCount bndg
-        return (count,bndg)
+        count <- readTVar $ socketCount binding
+        return (count,binding)
     if count == 1
         then do
             infoM _log $ "Opening binding for " ++ (show address)
@@ -130,47 +170,31 @@ bindAddress bindings address factory = do
 
 unbindAddress :: SocketBindings -> Address -> IO ()
 unbindAddress bindings address = do
-    (count, maybeBinding) <- atomically $ do
+    (count,maybeBinding) <- atomically $ do
         bmap <- readTVar bindings
         case M.lookup address bmap of
             Nothing -> return (0,Nothing)
-            Just b -> do
-                modifyTVar (socketCount b) $ \count -> count - 1
-                count <- readTVar (socketCount b)
-                return (count,Just b)
+            Just binding -> do
+                modifyTVar (socketCount binding) $ \count -> count - 1
+                count <- readTVar (socketCount binding)
+                if count == 0
+                    then do
+                        modifyTVar bindings $ \bm -> M.delete address bm
+                        sock <- takeTMVar $ socketSocket binding
+                        listener <- takeTMVar $ socketListener binding
+                        return (0,Just (sock,listener))
+                    else return (count,Nothing)
     case maybeBinding of
         -- no binding to shutdown; can just return
         Nothing -> do
-            warningM _log $ "No binding for " ++ (show address) ++ "; count is " ++ (show count)
+            infoM _log $ "No binding to shutdown for " ++ (show address) ++ "; count is " ++ (show count)
             return ()
         -- we're the last, so close the binding
-        Just binding -> do
-            if count == 0
-                then do
-                    (sock,listener) <- atomically $ do
-                        sock <- takeTMVar $ socketSocket binding
-                        listener <- takeTMVar $ socketListener binding
-                        return (sock,listener)
-                    infoM _log $ "Closing binding for " ++ (show address) ++ "; count is " ++ (show count)
-                    cancel listener
-                    sClose sock
-                    infoM _log $ "Closed binding for " ++ (show address)
-                    -- now we remove the binding from the map, if it is still there and 0
-                    -- the expectation here is that only one thread is going to remove it
-                    -- from the map
-                    atomically $ do
-                        bmap <- readTVar bindings
-                        case M.lookup address bmap of
-                            Nothing -> return ()
-                            Just b -> do
-                                newCount <- readTVar (socketCount b)
-                                if newCount == 0
-                                    then do
-                                        modifyTVar bindings $ \bm -> M.delete address bm
-                                        return ()
-                                    else return ()
-                else return ()
-            return ()
+        Just (sock,listener) -> do
+            infoM _log $ "Closing binding for " ++ (show address) ++ "; count is " ++ (show count)
+            cancel listener
+            sClose sock
+            infoM _log $ "Closed binding for " ++ (show address)
 
 data SocketTransport = SocketTransport {
   socketMessengers :: TVar (M.Map Address Messenger),
@@ -180,7 +204,6 @@ data SocketTransport = SocketTransport {
   socketInbound :: Mailbox Message,
   socketDispatchers :: S.Set (Async ()),
   socketResolver :: Resolver
-
 }
 
 {-|
@@ -462,3 +485,13 @@ closeBindings sockets = do
   bindings <- atomically $ readTVar sockets
   mapM_ (unbindAddress sockets)  $ M.keys bindings
   infoM _log $ "Closed bindings"
+
+socketTransportShutdown :: SocketTransport -> SocketBindings -> IO ()
+socketTransportShutdown transport sockets = do
+  closeBindings sockets
+  infoM _log $ "Closing messengers"
+  msngrs <- atomically $ readTVar $ socketMessengers transport
+  mapM_ closeMessenger $ M.elems msngrs
+  infoM _log $ "Closing dispatcher"
+  mapM_ cancel $ S.toList $ socketDispatchers transport
+  mapM_ wait $ S.toList $ socketDispatchers transport

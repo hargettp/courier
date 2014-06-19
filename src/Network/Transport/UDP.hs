@@ -43,13 +43,11 @@ import Control.Exception
 
 import qualified Data.ByteString as B
 import qualified Data.Map as M
-import qualified Data.Set as S
 
 import qualified Network.Socket as NS
 import Network.Socket.ByteString(sendAllTo,recvFrom)
 
 import System.Log.Logger
--- import qualified System.Random as R
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -67,36 +65,7 @@ lookupWildcardUDPAddress :: Address -> IO NS.SockAddr
 lookupWildcardUDPAddress address = lookupWildcardAddress NS.AF_INET NS.Datagram address
 
 newUDPTransport :: Resolver -> IO Transport
-newUDPTransport resolver = do
-  messengers <- atomically $ newTVar M.empty
-  bindings <- atomically $ newTVar M.empty
-  sockets <- newSocketBindings
-  inbound <- atomically $ newMailbox
-  dispatch <- async $ dispatcher bindings inbound
-  let transport = SocketTransport {
-        socketMessengers = messengers,
-        socketBindings = bindings,
-        socketConnection = newUDPConnection,
-        socketMessenger = newUDPMessenger,
-        socketInbound = inbound,
-        socketDispatchers = S.fromList [dispatch],
-        socketResolver = resolver
-        }
-  return Transport {
-      scheme = udpScheme,
-      handles = udpHandles transport,
-      bind = udpBind transport sockets,
-      sendTo = socketSendTo transport,
-      shutdown = udpShutdown transport sockets
-      }
-
-udpHandles :: SocketTransport -> Name -> IO Bool
-udpHandles transport name = do 
-  resolved <- resolve (socketResolver transport) name
-  return $ isJust resolved
-  where
-    isJust (Just _) = True
-    isJust _ = False
+newUDPTransport resolver = newSocketTransport resolver udpScheme udpBind newUDPConnection newUDPMessenger
 
 udpBind :: SocketTransport -> SocketBindings -> Mailbox Message -> Name -> IO (Either String Binding)
 udpBind transport sockets inc name = do
@@ -142,8 +111,9 @@ newUDPConnection address = do
         return ()
     }
 
-newUDPMessenger :: Connection -> Mailbox Message -> IO Messenger
-newUDPMessenger conn mailbox = do
+-- newTCPMessenger :: Bindings -> Resolver -> Connection -> Mailbox Message -> IO Messenger
+newUDPMessenger :: Bindings -> Resolver -> Connection -> Mailbox Message -> IO Messenger
+newUDPMessenger _ _ conn mailbox = do
     msngr <- newMessenger conn mailbox
     return msngr
 
@@ -175,15 +145,3 @@ udpRecvFrom sock count = do
     if B.null bs
         then return Nothing
         else return $ Just bs
-
-udpShutdown :: SocketTransport -> SocketBindings -> IO ()
-udpShutdown transport sockets = do
-  infoM _log $ "Unbinding transport"
-  closeBindings sockets
-  infoM _log $ "Closing messengers"
-  msngrs <- atomically $ readTVar $ socketMessengers transport
-  mapM_ closeMessenger $ M.elems msngrs
-  infoM _log $ "Closing dispatcher"
-  mapM_ cancel $ S.toList $ socketDispatchers transport
-  mapM_ wait $ S.toList $ socketDispatchers transport
-
