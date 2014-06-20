@@ -1,6 +1,8 @@
 0.1.0.15
 
-    * TBD
+    * Initial implementation of IPv6 transports (TCP and UDP)
+    * Small cleanup for better thread safety
+    * Refactored socket transports for more code sharing
 
 0.1.0.14
 

@@ -19,7 +19,8 @@
 -----------------------------------------------------------------------------
 
 module Network.Transport.TCP (
-  newTCPTransport
+  newTCPTransport,
+  newTCPTransport6
   ) where
 
 -- local imports
@@ -53,66 +54,75 @@ _log = "transport.tcp"
 tcpScheme :: Scheme
 tcpScheme = "tcp"
 
-lookupTCPAddress :: Address -> IO NS.SockAddr
-lookupTCPAddress address = lookupAddress NS.AF_INET NS.Stream address
+lookupTCPAddress :: Address -> NS.Family -> IO NS.SockAddr
+lookupTCPAddress address family = lookupAddress family NS.Stream address
 
-lookupWildcardTCPAddress :: Address -> IO NS.SockAddr
-lookupWildcardTCPAddress address = lookupWildcardAddress NS.AF_INET NS.Stream address
+lookupWildcardTCPAddress :: Address -> NS.Family -> IO NS.SockAddr
+lookupWildcardTCPAddress address family = lookupWildcardAddress family NS.Stream address
 
 {-|
-Create a new 'Transport' suitable for sending messages over TCP/IP.  There can
+Create a new 'Transport' suitable for sending messages over TCP/IP (IPv4).  There can
 be multiple instances of these 'Transport's: 'Network.Endpoints.Endpoint' using
 different instances will still be able to communicate, provided they use
 correct TCP/IP addresses (or hostnames) for communication.
 -}
 newTCPTransport :: Resolver -> IO Transport
-newTCPTransport resolver = newSocketTransport resolver tcpScheme tcpBind newTCPConnection newTCPMessenger
+newTCPTransport resolver = let family = NS.AF_INET in newSocketTransport resolver tcpScheme (tcpBind family) (newTCPConnection family) newTCPMessenger
 
-tcpBind :: SocketTransport -> SocketBindings -> Mailbox Message -> Name -> IO (Either String Binding)
-tcpBind transport sockets inc name = do
+{-|
+Create a new 'Transport' suitable for sending messages over TCP/IP (IPv4).  There can
+be multiple instances of these 'Transport's: 'Network.Endpoints.Endpoint' using
+different instances will still be able to communicate, provided they use
+correct TCP/IP addresses (or hostnames) for communication.
+-}
+newTCPTransport6 :: Resolver -> IO Transport
+newTCPTransport6 resolver = let family = NS.AF_INET6 in newSocketTransport resolver tcpScheme (tcpBind family) (newTCPConnection family) newTCPMessenger
+
+tcpBind :: NS.Family -> SocketTransport -> SocketBindings -> Mailbox Message -> Name -> IO (Either String Binding)
+tcpBind family transport sockets inc name = do
     atomically $ modifyTVar (socketBindings transport) $ \ bindings ->
         M.insert name inc bindings
     Just address <- resolve (socketResolver transport) name
     bindAddress sockets address $ do
-        sock <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
+        sock <- NS.socket family NS.Stream NS.defaultProtocol
         listener <- do
             infoM _log $ "Binding to address " ++ (show address)
-            tcpListen transport address sock
+            tcpListen transport family address sock
         return (sock,listener)
     return $ Right Binding {
         bindingName = name,
         unbind = tcpUnbind sockets address
         }
 
-tcpListen :: SocketTransport -> Address -> NS.Socket -> IO (Async ())
-tcpListen transport address sock = do
+tcpListen :: SocketTransport -> NS.Family -> Address -> NS.Socket -> IO (Async ())
+tcpListen transport family address sock = do
             catchExceptions (do
                     NS.setSocketOption sock NS.NoDelay 1
                     NS.setSocketOption sock NS.ReuseAddr 1
-                    sockAddr <- lookupWildcardTCPAddress address
+                    sockAddr <- lookupWildcardTCPAddress address family
                     NS.bind sock sockAddr
                     NS.listen sock 2048) -- TODO think about a configurable backlog
                 (\e -> do
                 warningM _log $ "Listen error on port " ++ address ++ ": " ++ (show (e :: SomeException))
                 NS.sClose sock)
-            async $ tcpAccept transport address sock
+            async $ tcpAccept transport family address sock
 
-tcpAccept :: SocketTransport -> Address -> NS.Socket -> IO ()
-tcpAccept transport address sock = do
+tcpAccept :: SocketTransport -> NS.Family -> Address -> NS.Socket -> IO ()
+tcpAccept transport family address sock = do
     infoM _log $ "Listening for connections on " ++ (show address) ++ ": " ++ (show sock)
     (client,clientAddress) <- NS.accept sock
-    _ <- async $ tcpDispatch transport address client clientAddress
-    tcpAccept transport address sock
+    _ <- async $ tcpDispatch transport family address client clientAddress
+    tcpAccept transport family address sock
 
-tcpDispatch :: SocketTransport -> Address -> NS.Socket -> NS.SockAddr -> IO ()
-tcpDispatch transport address client socketAddress = do
+tcpDispatch :: SocketTransport -> NS.Family -> Address -> NS.Socket -> NS.SockAddr -> IO ()
+tcpDispatch transport family address client socketAddress = do
   infoM _log $ "Accepted connection on " ++ (show address)
   identity <- tcpIdentify client socketAddress
   case identity of
         Nothing -> NS.sClose client
         Just (IdentifyMessage clientAddress) -> do
             infoM _log $ "Identified " ++ (show clientAddress)
-            newConn <- newTCPConnection clientAddress
+            newConn <- (newTCPConnection family) clientAddress
             atomically $ putTMVar (connSocket newConn) client
             msngr <- newMessenger newConn (socketInbound transport)
             found <- atomically $ do
@@ -143,15 +153,15 @@ tcpUnbind sockets address = do
   unbindAddress sockets address
   infoM _log $ "Unbound from TCP port " ++ (show address)
 
-newTCPConnection :: Address -> IO Connection
-newTCPConnection address = do
+newTCPConnection :: NS.Family -> Address -> IO Connection
+newTCPConnection family address = do
     sock <- atomically $ newEmptyTMVar
     return Connection {
         connAddress = address,
         connSocket = sock,
         connConnect = do
-            socket <- NS.socket NS.AF_INET NS.Stream NS.defaultProtocol
-            sockAddr <- lookupTCPAddress address
+            socket <- NS.socket family NS.Stream NS.defaultProtocol
+            sockAddr <- lookupTCPAddress address family
             NS.connect socket sockAddr
             -- NS.connect socket $ NS.addrAddress $ head ipv4Addrs
             atomically $ putTMVar sock socket

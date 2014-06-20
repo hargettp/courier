@@ -38,8 +38,16 @@ tests =
     testCase "udp-double-send-receive" $ endpointDoubleSendReceive _log newUDPTransport address1 address2,
     testCase "udp-send-receive-reply" $ endpointSendReceiveReply _log newUDPTransport address1 address2,
     testCase "udp-multiple-send-receive-reply" $ endpointMultipleSendReceiveReply _log newUDPTransport address1 address2,
-    testCase "udp-local-send-receive-reply" $ endpointLocalSendReceiveReply _log newUDPTransport address1 address2
+    testCase "udp-local-send-receive-reply" $ endpointLocalSendReceiveReply _log newUDPTransport address1 address2,
     
+    testCase "udp6-endpoints+transport" $ whenIPv6 $ testEndpointTransport,
+
+    testCase "udp6-bind-unbind" $ whenIPv6 $ endpointBindUnbind _log newUDPTransport6 address1 address2,
+    testCase "udp6-send-receive" $ whenIPv6 $ endpointSendReceive _log newUDPTransport6 address1 address2,
+    testCase "udp6-double-send-receive" $ whenIPv6 $ endpointDoubleSendReceive _log newUDPTransport6 address1 address2,
+    testCase "udp6-send-receive-reply" $ whenIPv6 $ endpointSendReceiveReply _log newUDPTransport6 address1 address2,
+    testCase "udp6-multiple-send-receive-reply" $ whenIPv6 $ endpointMultipleSendReceiveReply _log newUDPTransport6 address1 address2,
+    testCase "udp6-local-send-receive-reply" $ whenIPv6 $ endpointLocalSendReceiveReply _log newUDPTransport6 address1 address2
   ]
 
 testEndpointTransport :: Assertion

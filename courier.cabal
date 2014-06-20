@@ -55,6 +55,7 @@ library
                   Network.Endpoints
                   Network.Transport
                   Network.Transport.Memory
+                  Network.Transport.Sockets
                   Network.Transport.TCP
                   Network.Transport.UDP
                   Control.Concurrent.Mailbox
@@ -62,7 +63,6 @@ library
 
   ghc-options: -Wall -fno-state-hack
   other-modules:
-                  Network.Transport.Sockets
                   Network.Transport.Internal
   build-depends:       base >=4.6 && <5,
                        async,
@@ -94,6 +94,7 @@ Test-Suite test-courier
         containers,
         directory,
         hslogger,
+        network,
         stm,
         -- this project's modules
         courier

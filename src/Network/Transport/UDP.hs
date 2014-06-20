@@ -26,7 +26,8 @@
 -----------------------------------------------------------------------------
 
 module Network.Transport.UDP (
-  newUDPTransport
+  newUDPTransport,
+  newUDPTransport6
   ) where
 
 -- local imports
@@ -58,23 +59,26 @@ _log = "transport.udp"
 udpScheme :: Scheme
 udpScheme = "udp"
 
-lookupUDPAddress :: Address -> IO NS.SockAddr
-lookupUDPAddress address = lookupAddress NS.AF_INET NS.Datagram address
+lookupUDPAddress :: Address -> NS.Family -> IO NS.SockAddr
+lookupUDPAddress address family = lookupAddress family NS.Datagram address
 
-lookupWildcardUDPAddress :: Address -> IO NS.SockAddr
-lookupWildcardUDPAddress address = lookupWildcardAddress NS.AF_INET NS.Datagram address
+lookupWildcardUDPAddress :: Address -> NS.Family -> IO NS.SockAddr
+lookupWildcardUDPAddress address family = lookupWildcardAddress family NS.Datagram address
 
 newUDPTransport :: Resolver -> IO Transport
-newUDPTransport resolver = newSocketTransport resolver udpScheme udpBind newUDPConnection newUDPMessenger
+newUDPTransport resolver = newSocketTransport resolver udpScheme (udpBind NS.AF_INET) (newUDPConnection NS.AF_INET) newUDPMessenger
 
-udpBind :: SocketTransport -> SocketBindings -> Mailbox Message -> Name -> IO (Either String Binding)
-udpBind transport sockets inc name = do
+newUDPTransport6 :: Resolver -> IO Transport
+newUDPTransport6 resolver = newSocketTransport resolver udpScheme (udpBind NS.AF_INET6) (newUDPConnection NS.AF_INET6) newUDPMessenger
+
+udpBind :: NS.Family -> SocketTransport -> SocketBindings -> Mailbox Message -> Name -> IO (Either String Binding)
+udpBind family transport sockets inc name = do
     atomically $ modifyTVar (socketBindings transport) $ \bindings ->
         M.insert name inc bindings
     Just address <- resolve (socketResolver transport) name
     bindAddress sockets address $ do
-        sockaddr <- lookupWildcardUDPAddress address
-        sock <-  NS.socket NS.AF_INET NS.Datagram NS.defaultProtocol
+        sockaddr <- lookupWildcardUDPAddress address family
+        sock <-  NS.socket family NS.Datagram NS.defaultProtocol
         -- have to set this option in case we frequently rebind sockets
         infoM _log $ "Binding to " ++ (show address) ++ " over UDP"
         NS.setSocketOption sock NS.ReuseAddr 1
@@ -90,15 +94,15 @@ udpBind transport sockets inc name = do
             infoM _log $ "Unbound from UDP port " ++ (show address)
     }
 
-newUDPConnection :: Address -> IO Connection
-newUDPConnection address = do
+newUDPConnection :: NS.Family -> Address -> IO Connection
+newUDPConnection family address = do
   sock <- atomically newEmptyTMVar
   return Connection {
     connAddress = address,
     connSocket = sock,
-    connConnect = NS.socket NS.AF_INET NS.Datagram NS.defaultProtocol,
+    connConnect = NS.socket family NS.Datagram NS.defaultProtocol,
     connSend = (\s bs -> do
-        addr <- lookupUDPAddress address
+        addr <- lookupUDPAddress address family
         infoM _log $ "Sending via UDP to " ++ (show addr)
         sendAllTo s bs addr
         infoM _log $ "Sent via UDP to " ++ (show addr)),
@@ -111,7 +115,6 @@ newUDPConnection address = do
         return ()
     }
 
--- newTCPMessenger :: Bindings -> Resolver -> Connection -> Mailbox Message -> IO Messenger
 newUDPMessenger :: Bindings -> Resolver -> Connection -> Mailbox Message -> IO Messenger
 newUDPMessenger _ _ conn mailbox = do
     msngr <- newMessenger conn mailbox

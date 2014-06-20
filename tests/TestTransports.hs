@@ -1,6 +1,7 @@
 module TestTransports (
     testDelay,
     verifiedSend,
+    whenIPv6,
 
     -- Common tests
     endpointTransport,
@@ -16,12 +17,16 @@ module TestTransports (
 
 import Network.Endpoints
 
+import Network.Transport.Sockets
+
 -- external imports
 
 import Control.Concurrent
 import Control.Exception
 
 import Data.Serialize
+
+import qualified Network.Socket as NS
 
 import System.Log.Logger
 
@@ -30,11 +35,23 @@ import Test.HUnit
 -----------------------------------------------------------------------------
 -----------------------------------------------------------------------------
 
+_log :: String
+_log = "test.transports"
+
 testDelay :: Int
 testDelay = 1 * 1000000
 
 pause :: IO ()
 pause = threadDelay testDelay
+
+whenIPv6 :: Assertion -> Assertion
+whenIPv6 assn = do
+    addresses <- lookupAddresses NS.AF_INET6 NS.Stream "localhost:1"
+    case addresses of
+        [] -> do
+            warningM _log $ "IPv6 not available"
+            return ()
+        _ -> assn
 
 {-
 Common tests--just supply the transport factory and 2 addresses

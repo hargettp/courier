@@ -264,8 +264,8 @@ lookupAddresses family socketType address =
     let (host,port) = parseSocketAddress address
         hints = defaultHints { addrFlags = [AI_ADDRCONFIG, AI_CANONNAME, AI_NUMERICSERV] }
     in do
-          addresses <- getAddrInfo (Just hints) (Just host) (Just port)
-          return $ map addrAddress $ filter (\addrInfo -> addrFamily addrInfo == family && addrSocketType addrInfo == socketType) addresses
+        addresses <- getAddrInfo (Just hints) (Just host) (Just port)
+        return $ map addrAddress $ filter (\addrInfo -> addrFamily addrInfo == family && addrSocketType addrInfo == socketType) addresses
 
 lookupAddress :: Family -> SocketType -> Address -> IO SockAddr
 lookupAddress family socketType address = do
