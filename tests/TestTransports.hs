@@ -17,7 +17,7 @@ module TestTransports (
 
 import Network.Endpoints
 
-import Network.Transport.Sockets
+import Network.Transport.TCP
 
 -- external imports
 

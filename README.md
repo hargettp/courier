@@ -94,5 +94,4 @@ Successfully installed on both Linux 12.04 AMD64 and Mac OS X Mount Lion , using
 TODO
 
  * Ensure that new transports can be defined outside of the courier package and used with courier endpoints
- * Add IPv6 protocols
  * Consider adding support for RAW sockets

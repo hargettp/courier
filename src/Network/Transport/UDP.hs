@@ -27,7 +27,11 @@
 
 module Network.Transport.UDP (
   newUDPTransport,
-  newUDPTransport6
+  newUDPTransport6,
+
+  lookupAddresses,
+  lookupUDPAddress,
+  lookupWildcardUDPAddress
   ) where
 
 -- local imports

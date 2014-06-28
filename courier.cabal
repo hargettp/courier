@@ -22,7 +22,7 @@ description:         Inspired by Erlang's simple message-passing facilities, cou
                      applications may approximate the style of an Erlang application, and enjoy better 
                      composability of message reception with multiple independent dispatch routines or
                       message pumps.
-                     
+
 extra-source-files:  changes.md
                      examples/HelloWorld.hs
                      tests/Tests.hs
@@ -55,7 +55,6 @@ library
                   Network.Endpoints
                   Network.Transport
                   Network.Transport.Memory
-                  Network.Transport.Sockets
                   Network.Transport.TCP
                   Network.Transport.UDP
                   Control.Concurrent.Mailbox
@@ -64,6 +63,7 @@ library
   ghc-options: -Wall -fno-state-hack
   other-modules:
                   Network.Transport.Internal
+                  Network.Transport.Sockets
   build-depends:       base >=4.6 && <5,
                        async,
                        bytestring,

@@ -20,7 +20,11 @@
 
 module Network.Transport.TCP (
   newTCPTransport,
-  newTCPTransport6
+  newTCPTransport6,
+
+  lookupAddresses,
+  lookupTCPAddress,
+  lookupWildcardTCPAddress
   ) where
 
 -- local imports
