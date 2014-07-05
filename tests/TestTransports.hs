@@ -54,11 +54,13 @@ whenIPv6 assn = do
         _ -> assn
 
 {-
-Common tests--just supply the transport factory and 2 addresses
+Common tests--just supply the transport factory and an address generator
 -}
 
-endpointTransport :: String -> (Resolver -> IO Transport) -> Address -> Address -> Assertion
-endpointTransport _log newTransport address1 address2 = do
+endpointTransport :: String -> (Resolver -> IO Transport) -> IO Address -> Assertion
+endpointTransport _log newTransport newAddress = do
+  address1 <- newAddress
+  address2 <- newAddress
   let name1 = "endpoint1"
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),
@@ -69,9 +71,11 @@ endpointTransport _log newTransport address1 address2 = do
             _ <- newEndpoint [transport]
             return ())
 
-endpointBindUnbind :: String -> (Resolver -> IO Transport) -> Address -> Address -> Assertion
-endpointBindUnbind _log newTransport address1 address2 = do
+endpointBindUnbind :: String -> (Resolver -> IO Transport) -> IO Address -> Assertion
+endpointBindUnbind _log newTransport newAddress = do
   infoM _log "Starting bind-unbind test"
+  address1 <- newAddress
+  address2 <- newAddress
   let name1 = "endpoint1"
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),
@@ -87,9 +91,11 @@ endpointBindUnbind _log newTransport address1 address2 = do
               Right () -> assertBool "Unbind succeeded" True
             return ())
 
-endpointSendReceive :: String -> (Resolver -> IO Transport) -> Address -> Address -> Assertion
-endpointSendReceive _log newTransport address1 address2 = do
+endpointSendReceive :: String -> (Resolver -> IO Transport) -> IO Address -> Assertion
+endpointSendReceive _log newTransport newAddress = do
   infoM _log "Starting send-receive test"
+  address1 <- newAddress
+  address2 <- newAddress
   let name1 = "endpoint1"
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),
@@ -108,9 +114,11 @@ endpointSendReceive _log newTransport address1 address2 = do
       return ()
   infoM _log "Finished send-receive test"
 
-endpointDoubleSendReceive :: String -> (Resolver -> IO Transport) -> Address -> Address -> Assertion
-endpointDoubleSendReceive _log newTransport address1 address2 = do
+endpointDoubleSendReceive :: String -> (Resolver -> IO Transport) -> IO Address -> Assertion
+endpointDoubleSendReceive _log newTransport newAddress = do
   infoM _log "Starting double-send-receive test"
+  address1 <- newAddress
+  address2 <- newAddress
   let name1 = "endpoint1"
       name2 = "endpoint2"
       name3 = "endpoint3"
@@ -138,9 +146,11 @@ endpointDoubleSendReceive _log newTransport address1 address2 = do
       return ()
   infoM _log "Finished double-send-receive test"
 
-endpointSendReceiveReply :: String -> (Resolver -> IO Transport) -> Address -> Address -> Assertion
-endpointSendReceiveReply _log newTransport address1 address2 = do
+endpointSendReceiveReply :: String -> (Resolver -> IO Transport) -> IO Address -> Assertion
+endpointSendReceiveReply _log newTransport newAddress = do
   infoM _log "Starting send-receive-reply test"
+  address1 <- newAddress
+  address2 <- newAddress
   let name1 = "endpoint1"
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),
@@ -161,9 +171,10 @@ endpointSendReceiveReply _log newTransport address1 address2 = do
       return ()
   infoM _log "Finished send-receive-reply test"
 
-endpointLocalSendReceiveReply :: String -> (Resolver -> IO Transport) -> Address -> Address -> Assertion
-endpointLocalSendReceiveReply _log newTransport address1 _ = do
+endpointLocalSendReceiveReply :: String -> (Resolver -> IO Transport) -> IO Address -> Assertion
+endpointLocalSendReceiveReply _log newTransport newAddress = do
   infoM _log "Starting local-send-receive-reply test"
+  address1 <- newAddress
   let name1 = "endpoint1"
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),
@@ -186,9 +197,11 @@ endpointLocalSendReceiveReply _log newTransport address1 _ = do
         return ())
   infoM _log "Finished local-send-receive-reply test"
 
-endpointMultipleSendReceiveReply :: String -> (Resolver -> IO Transport) -> Address -> Address -> Assertion
-endpointMultipleSendReceiveReply _log newTransport address1 address2 = do
+endpointMultipleSendReceiveReply :: String -> (Resolver -> IO Transport) -> IO Address -> Assertion
+endpointMultipleSendReceiveReply _log newTransport newAddress = do
   infoM _log "Starting multiple-send-receive-reply test"
+  address1 <- newAddress
+  address2 <- newAddress
   let name1 = "endpoint1"
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),

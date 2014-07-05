@@ -32,6 +32,7 @@ extra-source-files:  changes.md
                      tests/TestTCP.hs
                      tests/TestTransports.hs
                      tests/TestUDP.hs
+                     tests/TestUtils.hs
 
 homepage:          http://github.com/hargettp/courier
 license:             MIT
