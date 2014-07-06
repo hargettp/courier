@@ -76,6 +76,7 @@ import qualified Data.Text as T
 
 import GHC.Generics
 
+import qualified Network.URI as U
 import Network.Socket hiding (recv,socket,bind,sendTo,shutdown)
 import qualified Network.Socket.ByteString as NSB
 
@@ -240,32 +241,34 @@ data IdentifyMessage = IdentifyMessage Address deriving (Generic)
 instance Serialize IdentifyMessage
 
 {-|
-Parse a TCP 'Address' into its respective 'HostName' and 'PortNumber' components, on the
-assumption the 'Address' has an identifer in the format @host:port@. If
+Parse a URI 'Address' into its respective 'HostName' and 'PortNumber' components, on the
+assumption the 'Address' has an identifer in the format @scheme://host:port@. If
 the port number is missing from the supplied address, it will default to 0.  If the
 hostname component is missing from the identifier (e.g., just @:port@), then hostname
 is assumed to be @localhost@.
 -}
-parseSocketAddress :: Address -> (HostName,ServiceName)
-parseSocketAddress address = 
-  let identifer = T.pack $ address 
-      parts = T.splitOn ":" identifer
-  in if (length parts) > 1 then
-       (host $ T.unpack $ parts !! 0, port $ T.unpack $ parts !! 1)
-     else (host $ T.unpack $ parts !! 0, "0")
-  where
-    host h = if h == "" then
-               "localhost"
-             else h
-    port p = p
+parseSocketAddress :: Address -> Maybe (HostName, ServiceName)
+parseSocketAddress address = do
+  uri <- U.parseURI address
+  auth <- U.uriAuthority uri
+  return (regname $ U.uriRegName auth, port $ U.uriPort auth)
+      where port p =
+                case p of
+                  "" ->  "0"
+                  (':':xs) ->  if null xs then "0" else xs
+                  _ -> "0"
+            regname r = if null r
+                        then "localhost"
+                        else dropWhile (== '[') $ takeWhile (/= ']') r
 
 lookupAddresses :: Family -> SocketType -> Address -> IO [SockAddr]
 lookupAddresses family socketType address =
-    let (host,port) = parseSocketAddress address
-        hints = defaultHints { addrFlags = [AI_ADDRCONFIG, AI_CANONNAME, AI_NUMERICSERV] }
-    in do
-        addresses <- getAddrInfo (Just hints) (Just host) (Just port)
-        return $ map addrAddress $ filter (\addrInfo -> addrFamily addrInfo == family && addrSocketType addrInfo == socketType) addresses
+    case parseSocketAddress address of
+      Nothing -> return []
+      Just (host, port) -> let hints = defaultHints { addrFlags = [AI_ADDRCONFIG, AI_CANONNAME, AI_NUMERICSERV] }
+                      in do
+                        addresses <- getAddrInfo (Just hints) (Just host) (Just port)
+                        return $ map addrAddress $ filter (\addrInfo -> addrFamily addrInfo == family && addrSocketType addrInfo == socketType) addresses
 
 lookupAddress :: Family -> SocketType -> Address -> IO SockAddr
 lookupAddress family socketType address = do
@@ -369,11 +372,15 @@ sender conn done mailbox = sendMessages
           infoM _log $ "Reconnected to " ++ (show $ connAddress conn)
           return ()
         Nothing -> do
-          let (host,port) = parseSocketAddress $ connAddress conn
-          infoM _log $ "Connecting to " ++ (show host) ++ ":" ++ (show port) -- (show address)
-          socket <- connConnect conn
-          infoM _log $ "Connected to " ++ (show $ connAddress conn)
-          atomically $ putTMVar (connSocket conn) socket
+                  case parseSocketAddress $ connAddress conn of
+                    Nothing -> do
+                       infoM _log $ "Invalid URI " ++ (show $ connAddress conn)
+                       return ()
+                    Just (host, port) -> do
+                       infoM _log $ "Connecting to " ++ (show host) ++ ":" ++ (show port) -- (show address)
+                       socket <- connConnect conn
+                       infoM _log $ "Connected to " ++ (show $ connAddress conn)
+                       atomically $ putTMVar (connSocket conn) socket
     disconnect = do
       connected <- atomically $ tryTakeTMVar $ connSocket conn
       case connected of

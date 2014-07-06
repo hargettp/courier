@@ -11,22 +11,22 @@ import qualified Network.Socket as NS
 newTCPAddress :: IO String
 newTCPAddress = do
   NS.SockAddrInet (NS.PortNum p) _ <- availablePort NS.AF_INET NS.Stream
-  return $ "localhost:" ++ show p
+  return $ "tcp://127.0.0.1:" ++ show p
 
 newUDPAddress :: IO String
 newUDPAddress = do
   NS.SockAddrInet (NS.PortNum p) _ <- availablePort NS.AF_INET NS.Datagram
-  return $ "localhost:" ++ show p
+  return $ "udp://127.0.0.1:" ++ show p
 
 newTCPAddress6 :: IO String
 newTCPAddress6 = do
   NS.SockAddrInet6 (NS.PortNum p) _ _ _ <- availablePort NS.AF_INET6 NS.Stream
-  return $ "localhost:" ++ show p
+  return $ "tcp://[::1]:" ++ show p
 
 newUDPAddress6 :: IO String
 newUDPAddress6 = do
   NS.SockAddrInet6 (NS.PortNum p) _ _ _ <- availablePort NS.AF_INET6 NS.Datagram
-  return $ "localhost:" ++ show p
+  return $ "udp://[::1]:" ++ show p
 
 availablePort     :: NS.Family -> NS.SocketType -> IO NS.SockAddr
 availablePort f t = do

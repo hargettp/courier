@@ -49,8 +49,8 @@ module HelloWorld (
  main = do
     let name1 = "endpoint1"
         name2 = "endpoint2"
-        resolver = resolverFromList [(name1,"localhost:2000"),
-                                (name2,"localhost:2001")]
+        resolver = resolverFromList [(name1,"tcp://localhost:2000"),
+                                (name2,"tcp://localhost:2001")]
     transport <- newTCPTransport resolver
     endpoint1 <- newEndpoint [transport]
     endpoint2 <- newEndpoint [transport]
