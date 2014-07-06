@@ -50,3 +50,4 @@ availablePort f t = do
 isPrivileged :: NS.SockAddr -> Bool
 isPrivileged (NS.SockAddrInet (NS.PortNum p) _) = p < 1025
 isPrivileged (NS.SockAddrInet6 (NS.PortNum p) _ _ _) = p < 1025
+isPrivileged (NS.SockAddrUnix _) = False
