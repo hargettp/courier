@@ -42,6 +42,7 @@ module Network.RPC (
     callWithTimeout,
     gcall,
     gcallWithTimeout,
+    anyCall,
 
     hear,
     hearTimeout,
@@ -52,6 +53,8 @@ module Network.RPC (
     hangup,
 
     Request(..),
+    RequestId,
+    mkRequestId,
     Response(..)
 
 ) where
@@ -85,7 +88,17 @@ data RPCMessageType = Req | Rsp deriving (Eq,Show,Enum,Generic)
 
 instance Serialize RPCMessageType
 
-type RequestId = (Word32, Word32, Word32, Word32)
+{-
+A unique identifier for a 'Request'
+-}
+newtype RequestId = RequestId (Word32, Word32, Word32, Word32) deriving (Generic,Eq,Show)
+
+instance Serialize (RequestId)
+
+mkRequestId :: IO RequestId
+mkRequestId = do
+    ruuid <- nextRandom
+    return $ RequestId $ toWords ruuid
 
 data Request = Request {
     requestId :: RequestId,
@@ -145,18 +158,18 @@ newCallSite = CallSite
 {-|
 Call a method with the provided arguments on the recipient with the given name.
 
-the caller will wait until a matching response is received.
+The caller will wait until a matching response is received.
 -}
 call :: CallSite -> Name -> Method -> Message -> IO Message
 call (CallSite endpoint from) name method args = do
-    ruuid <- nextRandom
-    let req = Request {requestId = toWords ruuid,requestCaller = from,requestMethod = method, requestArgs = args}
+    rid <- mkRequestId
+    let req = Request {requestId = rid,requestCaller = from,requestMethod = method, requestArgs = args}
     sendMessage_ endpoint name $ encode req
     selectMessage endpoint $ \msg -> do
         case decode msg of
             Left _ -> Nothing
-            Right (Response rid _ value) -> do
-                if rid == (requestId req)
+            Right (Response respId _ value) -> do
+                if respId == rid
                     then Just value
                     else Nothing
 
@@ -184,8 +197,8 @@ the caller will wait until all matching responses are received.
 -}
 gcall :: CallSite -> [Name] -> Method -> Message -> IO (M.Map Name Message)
 gcall (CallSite endpoint from) names method args = do
-    ruuid <- nextRandom
-    let req = Request {requestId = toWords ruuid,requestCaller = from,requestMethod = method, requestArgs = args}
+    rid <- mkRequestId
+    let req = Request {requestId = rid,requestCaller = from,requestMethod = method, requestArgs = args}
     sendAll req
     recvAll req M.empty
     where
@@ -219,8 +232,8 @@ if a response was received.
 -}
 gcallWithTimeout :: CallSite -> [Name] -> Method -> Int -> Message -> IO (M.Map Name (Maybe Message))
 gcallWithTimeout (CallSite endpoint from) names method delay args = do
-    ruuid <- nextRandom
-    let req = Request {requestId = toWords ruuid,requestCaller = from,requestMethod = method, requestArgs = args}
+    rid <- mkRequestId
+    let req = Request {requestId = rid,requestCaller = from,requestMethod = method, requestArgs = args}
     sendAll req
     allResults <- atomically $ newTVar M.empty
     responses <- race (recvAll req allResults) (threadDelay delay)
@@ -256,6 +269,28 @@ gcallWithTimeout (CallSite endpoint from) names method delay args = do
         -- but put Nothing for those handlers that did not return a result in time
         complete :: (Serialize b) => M.Map Name b -> M.Map Name (Maybe b)
         complete partial = foldl (\final name -> M.insert name (M.lookup name partial) final) M.empty names
+
+{-|
+Invoke the same method on multiple 'Name's, and wait indefinitely until
+the first response from any 'Name', returning the value and the 'Name'
+which responded.
+-}
+anyCall :: CallSite -> [Name] -> Method -> Message -> IO (Message,Name)
+anyCall (CallSite endpoint from) names method args = do
+    rid <- mkRequestId
+    let req = Request {requestId = rid,requestCaller = from,requestMethod = method, requestArgs = args}
+    sendAll req
+    recvAny req
+    where
+        sendAll req = do
+            forM_ names $ \name -> sendMessage_ endpoint name $ encode req
+        recvAny req = selectMessage endpoint $ \msg -> do
+                case decode msg of
+                    Left _ -> Nothing
+                    Right (Response rid name value) -> do
+                        if (rid == (requestId req)) && (elem name names)
+                            then Just (value,name)
+                            else Nothing
 
 {-|
 A 'Reply' is a one-shot function for sending a response to an incoming request.

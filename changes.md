@@ -3,6 +3,11 @@
     * Initial implementation of IPv6 transports (TCP and UDP)
     * Small cleanup for better thread safety
     * Refactored socket transports for more code sharing
+    * Added anyCall
+    * Exported RequestId and mkRequestId
+    * Incorporated changes from carletes for running tests in parallel by allowing
+    each test to bind to their own set of ports; on machines with multiple CPUs the speedup
+    has a noticeable impact on producitivity
 
 0.1.0.14
 
@@ -34,12 +39,12 @@
     in pure methods.  By leaving the interface to use Message values, its not only
     consistent with the rest of Endpoint behavior, but it clarifies the responsibility
     of the calling application to manage their Message payloads on their own.
-    
+
     * Improvements to RPC. Previously, it was not possible to differentiate correctly
     between requests and responses in the same mailbox: the only check was that
     deserialization succeeded, which wasn't a sufficient test, and it would be possible
     to deserialize a response as a request, etc.  This lead to spurious errors.
-    
+
     * Added functions for detecting presence of messages in an an endpoint's mailbox
     (while still leaving them unconsumed): mostly added this for applications that
     need to react to the presence of a particular message, but not actual consume

@@ -49,6 +49,7 @@ tests = [
     testCase "call-one-handler" testOneHandler,
     testCase "call-two-handlers" testTwoHandlers,
     testCase "gcall-three-handlers" testGroupCall,
+    testCase "anycall-three-handlers" testAnyCall,
     testCase "call-one-with-timeout" testOneHandlerWithTimeout,
     testCase "gcall-three-handlers-with-timeout"testGroupCallWithTimeout
   ]
@@ -189,6 +190,35 @@ testGroupCall = do
     assertBool "Bar not present in results" (elem (encode "bar") $ M.elems results)
     assertBool "Bar not present in results" (elem (encode "baz") $ M.elems results)
     assertEqual "Unxpected number of results" 3 (M.size results)
+    hangup h2
+    hangup h3
+    hangup h4
+
+testAnyCall :: Assertion
+testAnyCall = do
+    let name1 = "endpoint1"
+        name2 = "endpoint2"
+        name3 = "endpoint3"
+        name4 = "endpoint4"
+    transport <- newMemoryTransport
+    endpoint1 <- newEndpoint [transport]
+    endpoint2 <- newEndpoint [transport]
+    endpoint3 <- newEndpoint [transport]
+    endpoint4 <- newEndpoint [transport]
+    Right () <- bindEndpoint endpoint1 name1
+    Right () <- bindEndpoint endpoint2 name2
+    Right () <- bindEndpoint endpoint3 name3
+    Right () <- bindEndpoint endpoint4 name4
+    h2 <- handle endpoint2 name2 "foo" $ \bytes -> let Right msg = decode bytes in
+                                                      return $ encode $ if msg == "hello" then "foo" else ""
+    h3 <- handle endpoint3 name3 "foo" $ \bytes -> let Right msg = decode bytes in
+                                                       return $ encode $ if msg == "hello" then "foo" else ""
+    h4 <- handle endpoint4 name4 "foo" $ \bytes -> let Right msg = decode bytes in
+                                                       return $ encode $ if msg == "hello" then "foo" else ""
+    let cs = newCallSite endpoint1 name1
+    (result,responder) <- (anyCall cs [name2,name3,name4] "foo" $ encode "hello")
+    assertEqual "Response should have been 'foo'" (encode "foo") result
+    assertBool "Responder was not in original list of names" $ elem responder [name2,name3,name4]
     hangup h2
     hangup h3
     hangup h4
