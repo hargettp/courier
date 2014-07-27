@@ -44,6 +44,7 @@ module Network.RPC (
     gcallWithTimeout,
     anyCall,
 
+    methodSelector,
     hear,
     hearTimeout,
     Reply,
@@ -95,6 +96,9 @@ newtype RequestId = RequestId (Word32, Word32, Word32, Word32) deriving (Generic
 
 instance Serialize (RequestId)
 
+{-|
+Create a new identifier for 'Request's
+-}
 mkRequestId :: IO RequestId
 mkRequestId = do
     ruuid <- nextRandom
@@ -105,8 +109,8 @@ data Request = Request {
     requestCaller :: Name,
     requestMethod :: Method,
     requestArgs :: Message
-}
-
+} deriving (Eq,Show)
+ 
 instance Serialize Request where
     put req = do
         put Req
@@ -126,7 +130,7 @@ data Response = Response {
     responseId :: RequestId,
     responseFrom :: Name,
     responseValue :: Message
-}
+} deriving (Eq,Show)
 
 instance Serialize Response where
     put rsp = do
@@ -298,6 +302,20 @@ A 'Reply' is a one-shot function for sending a response to an incoming request.
 type Reply b = b -> IO ()
 
 {-|
+A simple function that, given a 'Method', returns a filter suitable for
+use with 'selectMessage'. The typical use case will involve partial
+application: @methodSelector method@ passed as an argument to 'selectMessage'.
+-}
+methodSelector :: Method -> Message -> Maybe (Name,RequestId,Message)
+methodSelector method msg = do
+    case decode msg of
+        Left _ -> Nothing
+        Right (Request rid caller rmethod args) -> do
+            if rmethod == method
+                then Just (caller,rid,args)
+                else Nothing
+
+{-|
 Wait for a single incoming request to invoke the indicated 'Method' on the specified
 'Endpoint'. Return both the method arguments and a 'Reply' function useful for sending
 the reply.  A good pattern for using 'hear' will pattern match the result to a tuple of
@@ -310,13 +328,7 @@ call.
 -}
 hear :: Endpoint -> Name -> Method -> IO (Message,Reply Message)
 hear endpoint name method = do
-    (caller,rid,args) <- selectMessage endpoint $ \msg -> do
-                case decode msg of
-                    Left _ -> Nothing
-                    Right (Request rid caller rmethod args) -> do
-                        if rmethod == method
-                            then Just (caller,rid,args)
-                            else Nothing
+    (caller,rid,args) <- selectMessage endpoint $ methodSelector method
     return (args, reply caller rid)
     where
         reply caller rid result = do
@@ -330,13 +342,7 @@ method arguments and a 'Reply' function useful for sending the reply.
 -}
 hearTimeout :: Endpoint -> Name -> Method -> Int -> IO (Maybe (Message,Reply Message))
 hearTimeout endpoint name method timeout = do
-    req <- selectMessageTimeout endpoint timeout $ \msg -> do
-                case decode msg of
-                    Left _ -> Nothing
-                    Right (Request rid caller rmethod args) -> do
-                        if rmethod == method
-                            then Just (caller,rid,args)
-                            else Nothing
+    req <- selectMessageTimeout endpoint timeout $ methodSelector method
     case req of
         Just (caller,rid,args) -> return $ Just (args, reply caller rid)
         Nothing -> return Nothing

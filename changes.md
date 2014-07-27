@@ -8,6 +8,7 @@
     * Incorporated changes from carletes for running tests in parallel by allowing
     each test to bind to their own set of ports; on machines with multiple CPUs the speedup
     has a noticeable impact on producitivity
+    * Added methodSelector for applications that may want to customize RPC handling
 
 0.1.0.14
 
