@@ -5,9 +5,8 @@ module-template: ! "------------------------------------------------------------
   (..... module description .....)\n--\n-----------------------------------------------------------------------------\n\nmodule
   MODULE_NAME (\n) where\n\n-- local imports\n\n-- external imports\n\n--------------------------------------------------------------------------------\n--------------------------------------------------------------------------------\n"
 extensions: {}
-environment: ghc-7.8-unstable
+environment: ghc-7.8-stable-14.09
 cabal-file: project.cabal
-hidden-packages: ''
 version: 1
 extra-packages: ! 'Hackage: hslogger 1.2.3
 
