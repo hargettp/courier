@@ -129,15 +129,7 @@ tcpDispatch transport family address client socketAddress = do
             newConn <- (newTCPConnection family) clientAddress
             atomically $ putTMVar (connSocket newConn) client
             msngr <- newMessenger newConn (socketInbound transport)
-            found <- atomically $ do
-                msngrs <- readTVar $ socketMessengers transport
-                return $ M.lookup clientAddress msngrs
-            case found of
-                Just _ -> do
-                      infoM _log $ "Already have messenger for " ++ (show clientAddress)
-                      closeMessenger msngr
-                Nothing -> do
-                    addMessenger transport clientAddress msngr
+            replaceMessenger transport clientAddress msngr
 
 tcpIdentify :: NS.Socket -> NS.SockAddr -> IO (Maybe IdentifyMessage)
 tcpIdentify client clientAddress = do

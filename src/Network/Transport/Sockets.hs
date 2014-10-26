@@ -38,6 +38,7 @@ module Network.Transport.Sockets (
     Messenger(..),
     newMessenger,
     addMessenger,
+    replaceMessenger,
     deliver,
     closeMessenger,
 
@@ -307,6 +308,20 @@ addMessenger transport address msngr = do
         msngrs <- readTVar (socketMessengers transport)
         return msngrs
   infoM _log $ "Added messenger to " ++ (show address) ++ "; messengers are " ++ (show msngrs)
+
+replaceMessenger :: SocketTransport -> Address -> Messenger -> IO ()
+replaceMessenger transport address msngr = do
+    found <- atomically $ do
+        msngrs <- readTVar $ socketMessengers transport
+        return $ M.lookup address msngrs
+    case found of
+        Just _ -> do
+              infoM _log $ "Already have messenger for " ++ (show address)
+              closeMessenger msngr
+        Nothing -> do
+            addMessenger transport address msngr
+
+
 
 deliver :: Messenger -> Message -> IO ()
 deliver msngr message = atomically $ writeMailbox (messengerOut msngr) message
