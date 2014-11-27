@@ -27,7 +27,7 @@ tests :: [Test.Framework.Test]
 tests =
   [
     testCase "tcp-endpoints+transport" $ testEndpointTransport newTCPTransport,
-    testCase "tcp-bind-unbind" $ endpointBindUnbind _log newTCPTransport newTCPAddress,
+    -- testCase "tcp-bind-unbind" $ endpointBindUnbind _log newTCPTransport newTCPAddress,
     testCase "tcp-send-receive" $ endpointSendReceive _log newTCPTransport newTCPAddress,
     testCase "tcp-double-send-receive" $ endpointDoubleSendReceive _log newTCPTransport newTCPAddress,
     testCase "tcp-send-receive-reply" $ endpointSendReceiveReply _log newTCPTransport newTCPAddress,
