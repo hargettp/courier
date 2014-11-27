@@ -34,7 +34,7 @@ module Network.Transport (
   Envelope(..),
   Message,
   Name,
-  Resolver,
+  Resolver(..),
   resolve,
   resolverFromList,
   Scheme,
