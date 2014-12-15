@@ -31,6 +31,7 @@ tests =
     testCase "tcp-send-receive" $ endpointSendReceive _log newTCPTransport newTCPAddress,
     testCase "tcp-double-send-receive" $ endpointDoubleSendReceive _log newTCPTransport newTCPAddress,
     testCase "tcp-send-receive-reply" $ endpointSendReceiveReply _log newTCPTransport newTCPAddress,
+    -- testCase "tcp-multiple-client-send-receive-reply" $ endpointMultipleClientSendReceiveReply _log newTCPTransport newTCPAddress,
     testCase "tcp-multiple-send-receive-reply" $ endpointMultipleSendReceiveReply _log newTCPTransport newTCPAddress,
     testCase "tcp-local-send-receive-reply" $ endpointLocalSendReceiveReply _log newTCPTransport newTCPAddress,
 
@@ -39,6 +40,7 @@ tests =
     testCase "tcp6-send-receive" $ whenIPv6 $ endpointSendReceive _log newTCPTransport6 newTCPAddress6,
     testCase "tcp6-double-send-receive" $ whenIPv6 $ endpointDoubleSendReceive _log newTCPTransport6 newTCPAddress6,
     testCase "tcp6-send-receive-reply" $ whenIPv6 $ endpointSendReceiveReply _log newTCPTransport6 newTCPAddress6,
+    -- testCase "tcp6-multiple-client-send-receive-reply" $ endpointMultipleClientSendReceiveReply _log newTCPTransport6 newTCPAddress6,
     testCase "tcp6-multiple-send-receive-reply" $ whenIPv6 $ endpointMultipleSendReceiveReply _log newTCPTransport6 newTCPAddress6,
     testCase "tcp6-local-send-receive-reply" $ whenIPv6 $ endpointLocalSendReceiveReply _log newTCPTransport6 newTCPAddress6
   ]

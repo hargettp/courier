@@ -9,6 +9,7 @@ module TestTransports (
     endpointSendReceive,
     endpointDoubleSendReceive,
     endpointSendReceiveReply,
+    endpointMultipleClientSendReceiveReply,
     endpointLocalSendReceiveReply,
     endpointMultipleSendReceiveReply
 ) where
@@ -145,6 +146,54 @@ endpointDoubleSendReceive _log newTransport newAddress = do
       Right () <- unbindEndpoint endpoint3 name3
       return ()
   infoM _log "Finished double-send-receive test"
+
+endpointMultipleClientSendReceiveReply :: String -> (Resolver -> IO Transport) -> IO Address -> Assertion
+endpointMultipleClientSendReceiveReply _log newTransport newAddress = do
+  infoM _log "Starting send-receive-reply test"
+  address1 <- newAddress
+  address2 <- newAddress
+  let name1 = "endpoint1"
+      name2 = "endpoint2"
+  let resolver = resolverFromList [(name1,address1),
+                                   (name2,address2)]
+  bracket (newTransport resolver)
+    shutdown $ \transport1 -> do
+        endpoint1 <- newEndpoint [transport1]
+        Right () <- bindEndpoint endpoint1 name1
+        pause
+        bracket (newTransport resolver)
+            shutdown $ \transport2 -> do
+                endpoint2 <- newEndpoint [transport2]
+                Right () <- bindEndpoint endpoint2 name2
+                pause
+                
+                verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"
+                verifiedSend _log endpoint2 endpoint1 name2 name1 "hi!"
+        pause
+        bracket (newTransport resolver)
+            shutdown $ \transport2 -> do
+                endpoint2 <- newEndpoint [transport2]
+                Right () <- bindEndpoint endpoint2 name2
+                pause
+                
+                verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"
+                verifiedSend _log endpoint2 endpoint1 name2 name1 "hi!"
+    
+  bracketTest _log resolver newTransport $ \transport1 transport2 -> do 
+      endpoint1 <- newEndpoint [transport1]
+      endpoint2 <- newEndpoint [transport2]
+      Right () <- bindEndpoint endpoint1 name1
+      Right () <- bindEndpoint endpoint2 name2
+      pause
+
+      verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"
+      verifiedSend _log endpoint2 endpoint1 name2 name1 "hi!"
+
+      Right () <- unbindEndpoint endpoint1 name1
+      Right () <- unbindEndpoint endpoint2 name2
+
+      return ()
+  infoM _log "Finished send-receive-reply test"
 
 endpointSendReceiveReply :: String -> (Resolver -> IO Transport) -> IO Address -> Assertion
 endpointSendReceiveReply _log newTransport newAddress = do
