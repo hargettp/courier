@@ -3,6 +3,10 @@ courier
 
 [![Build Status](https://travis-ci.org/hargettp/courier.svg?branch=master)](https://travis-ci.org/hargettp/courier)
 
+NOTE: this library's support for TCP/IP transports is currently *broken*, due to a poor design for connection handling.
+
+------------------
+
 A basic message-passing library, intended for simplifying network applications.
 
 Inspired by Erlang's simple message-passing facilities, courier provides roughly similar capabilities.  Applications simply 
