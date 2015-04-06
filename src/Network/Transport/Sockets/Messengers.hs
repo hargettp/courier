@@ -65,6 +65,9 @@ data Messenger = Messenger {
     messengerConnection :: Connection
     }
 
+instance Show Messenger where
+  show msngr = "Messenger(" ++ (show $ messengerAddress msngr) ++ ")"
+
 newMessenger :: Connection -> Mailbox Message -> IO Messenger
 newMessenger conn inc = do
   out <- atomically $ newMailbox
@@ -179,13 +182,10 @@ connector conn mbox done = do
     if isDone then
         return ()
     else do
-        connect
+        let (host,port) = parseSocketAddress $ connAddress conn
+        infoM _log $ "Connecting to " ++ (show host) ++ ":" ++ (show port) -- (show address)
+        socket <- connConnect conn
+        infoM _log $ "Connected to " ++ (show $ connAddress conn)
+        -- atomically $ putTMVar (connSocket conn) $ SocketRef 0 socket
+        setConnectedSocket (connSocket conn) socket
         connector conn mbox done
-    where
-        connect = do
-            let (host,port) = parseSocketAddress $ connAddress conn
-            infoM _log $ "Connecting to " ++ (show host) ++ ":" ++ (show port) -- (show address)
-            socket <- connConnect conn
-            infoM _log $ "Connected to " ++ (show $ connAddress conn)
-            -- atomically $ putTMVar (connSocket conn) $ SocketRef 0 socket
-            setConnectedSocket (connSocket conn) socket

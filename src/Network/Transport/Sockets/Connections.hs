@@ -37,8 +37,6 @@ import Control.Concurrent.STM
 import qualified Data.ByteString as B
 
 import Network.Socket hiding (bind, recv, sendTo,shutdown, socket)
-import qualified Network.Socket.ByteString  as NSB
-
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -58,7 +56,7 @@ data Connection = Connection {
 
 connected :: SocketVar -> STM SocketRef
 connected var = do
-    state <- readTMVar var
+    state <- readTVar var
     case socketStateSocket state of
         Nothing -> retry
         Just socket -> return SocketRef {
@@ -68,7 +66,7 @@ connected var = do
 
 disconnected :: SocketVar -> STM ()
 disconnected var = do
-    state <- readTMVar var
+    state <- readTVar var
     case socketStateSocket state of
         Nothing -> return ()
         Just _ -> do
@@ -76,9 +74,9 @@ disconnected var = do
 
 setConnectedSocket :: SocketVar -> Socket -> IO ()
 setConnectedSocket var socket = atomically $ do
-    state <- readTMVar var
+    state <- readTVar var
     -- atomically $ putTMVar (connSocket conn) $ SocketRef 0 socket
-    putTMVar var $ state {
+    writeTVar var $ state {
         socketStateVersion = 1 + (socketStateVersion state),
         socketStateSocket = Just socket
         }
@@ -86,13 +84,13 @@ setConnectedSocket var socket = atomically $ do
 closeConnectedSocket :: SocketVar -> SocketRef -> IO ()
 closeConnectedSocket var ref = do
     maybeOldSocket <- atomically $ do
-        state <- readTMVar var
+        state <- readTVar var
         case socketStateSocket state of
             Nothing -> return Nothing
-            Just socket -> do
+            Just _ -> do
                 if (socketRefVersion ref) == (socketStateVersion state) then
                     -- atomically $ putTMVar (connSocket conn) $ SocketRef 0 socket
-                    putTMVar var $ state {
+                    writeTVar var $ state {
                         socketStateVersion = 1 + (socketStateVersion state),
                         socketStateSocket = Nothing
                         }
@@ -106,12 +104,12 @@ closeConnectedSocket var ref = do
 forceCloseConnectedSocket :: SocketVar -> IO ()
 forceCloseConnectedSocket var = do
     maybeOldSocket <- atomically $ do
-        state <- readTMVar var
+        state <- readTVar var
         case socketStateSocket state of
             Nothing -> return Nothing
-            Just socket -> do
+            Just _ -> do
                 -- atomically $ putTMVar (connSocket conn) $ SocketRef 0 socket
-                putTMVar var $ state {
+                writeTVar var $ state {
                     socketStateVersion = 1 + (socketStateVersion state),
                     socketStateSocket = Nothing
                     }
@@ -120,10 +118,10 @@ forceCloseConnectedSocket var = do
         Nothing -> return ()
         Just socket -> sClose socket
 
-type SocketVar = TMVar SocketState
+type SocketVar = TVar SocketState
 
 newSocketVar :: STM SocketVar
-newSocketVar = newTMVar $ SocketState {
+newSocketVar = newTVar $ SocketState {
         socketStateVersion = 0,
         socketStateSocket = Nothing
     }
@@ -131,10 +129,9 @@ newSocketVar = newTMVar $ SocketState {
 data SocketRef = SocketRef {
     socketRefVersion :: Integer,
     socketRefSocket  :: Socket
-}
-
+} deriving (Eq,Show)
 
 data SocketState = SocketState {
     socketStateVersion :: Integer,
     socketStateSocket  :: Maybe Socket
-    }
+    } deriving (Eq,Show)

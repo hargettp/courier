@@ -75,12 +75,10 @@ import qualified Data.ByteString as B
 import qualified Data.Map as M
 import Data.Serialize
 import qualified Data.Set as S
-import qualified Data.Text as T
 
 import GHC.Generics
 
 import Network.Socket hiding (bind, recv, sendTo,shutdown, socket)
-import qualified Network.Socket.ByteString  as NSB
 
 import System.Log.Logger
 
@@ -215,9 +213,6 @@ instance Serialize IdentifyMessage
 
 type SocketSend = Socket -> B.ByteString -> IO ()
 
-instance Show Messenger where
-  show msngr = "Messenger(" ++ (show $ messengerAddress msngr) ++ ")"
-
 addMessenger :: SocketTransport -> Address -> Messenger -> IO ()
 addMessenger transport address msngr = do
   msngrs <- atomically $ do
@@ -297,7 +292,7 @@ socketSendTo transport name msg = do
         Nothing -> do
           msngrs <- atomically $ readTVar $ socketMessengers transport
           infoM _log $ "No messenger for " ++ (show address) ++ " in " ++ (show msngrs)
-          socketVar <- atomically $ newEmptyTMVar
+          socketVar <- atomically $ newSocketVar
           newConn <- (socketConnection transport) address
           let conn = newConn {connSocket = socketVar}
           msngr <- (socketMessenger transport) conn (socketInbound transport)

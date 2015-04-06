@@ -101,7 +101,7 @@ udpBind family transport sockets inc name = do
 
 newUDPConnection :: NS.Family -> Address -> IO Connection
 newUDPConnection family address = do
-  var <- atomically newEmptyTMVar
+  var <- atomically newSocketVar
   return Connection {
     connAddress = address,
     connSocket = var,
