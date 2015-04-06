@@ -29,25 +29,27 @@ module Network.Transport.TCP (
 
 -- local imports
 
-import           Network.Transport
-import           Network.Transport.Internal
-import           Network.Transport.Sockets
+import Network.Transport
+import Network.Transport.Internal
+import Network.Transport.Sockets
+import Network.Transport.Sockets.Addresses
+import Network.Transport.Sockets.Messengers
 
 -- external imports
 
-import           Control.Concurrent.Async
-import           Control.Concurrent.STM
-import           Control.Exception
+import Control.Concurrent.Async
+import Control.Concurrent.STM
+import Control.Exception
 
-import qualified Data.ByteString            as B
-import qualified Data.Map                   as M
-import           Data.Serialize
-import qualified Data.Set                   as S
+import qualified Data.ByteString as B
+import qualified Data.Map as M
+import Data.Serialize
+import qualified Data.Set as S
 
-import qualified Network.Socket             as NS
+import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString  as NSB
 
-import           System.Log.Logger
+import System.Log.Logger
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------

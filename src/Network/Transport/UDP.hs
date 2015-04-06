@@ -39,6 +39,7 @@ module Network.Transport.UDP (
 import Network.Transport
 import Network.Transport.Internal
 import Network.Transport.Sockets
+import Network.Transport.Sockets.Addresses
 
 -- external imports
 
