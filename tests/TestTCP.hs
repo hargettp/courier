@@ -23,18 +23,26 @@ import Test.Framework.Providers.HUnit
 _log :: String
 _log = "test.transport.tcp"
 
+maxTestDelay :: Int
+maxTestDelay = testDelay * 3
+
 tests :: [Test.Framework.Test]
 tests =
   [
-    testCase "tcp-endpoints+transport" $ testEndpointTransport newTCPTransport,
-    -- testCase "tcp-bind-unbind" $ endpointBindUnbind _log newTCPTransport newTCPAddress,
-    testCase "tcp-send-receive" $ endpointSendReceive _log newTCPTransport newTCPAddress,
-    testCase "tcp-double-send-receive" $ endpointDoubleSendReceive _log newTCPTransport newTCPAddress,
-    testCase "tcp-send-receive-reply" $ endpointSendReceiveReply _log newTCPTransport newTCPAddress,
-    -- testCase "tcp-multiple-client-send-receive-reply" $ endpointMultipleClientSendReceiveReply _log newTCPTransport newTCPAddress,
-    testCase "tcp-multiple-send-receive-reply" $ endpointMultipleSendReceiveReply _log newTCPTransport newTCPAddress,
-    testCase "tcp-local-send-receive-reply" $ endpointLocalSendReceiveReply _log newTCPTransport newTCPAddress,
-
+    {-
+    testCase "tcp-endpoints+transport" $ bounded $ testEndpointTransport newTCPTransport,
+    testCase "tcp-bind-unbind" $ bounded $ endpointBindUnbind _log newTCPTransport newTCPAddress,
+    -}
+    testCase "tcp-send-receive" $ timeBound maxTestDelay $ troubleshoot $ endpointSendReceive _log newTCPTransport newTCPAddress --,
+    {-
+    testCase "tcp-double-send-receive" $ bounded $ endpointDoubleSendReceive _log newTCPTransport newTCPAddress,
+    testCase "tcp-send-receive-reply" $ bounded $ endpointSendReceiveReply _log newTCPTransport newTCPAddress,
+    testCase "tcp-multiple-client-send-receive-reply" $ bounded $ endpointMultipleClientSendReceiveReply _log newTCPTransport newTCPAddress,
+    testCase "tcp-multiple-send-receive-reply" $ bounded $ endpointMultipleSendReceiveReply _log newTCPTransport newTCPAddress,
+    testCase "tcp-local-send-receive-reply" $ bounded $ endpointLocalSendReceiveReply _log newTCPTransport newTCPAddress -- ,
+    -}
+    
+    {-
     testCase "tcp6-endpoints+transport" $ whenIPv6 $ testEndpointTransport newTCPTransport6,
     testCase "tcp6-bind-unbind" $ whenIPv6 $ endpointBindUnbind _log newTCPTransport6 newTCPAddress6,
     testCase "tcp6-send-receive" $ whenIPv6 $ endpointSendReceive _log newTCPTransport6 newTCPAddress6,
@@ -43,6 +51,7 @@ tests =
     -- testCase "tcp6-multiple-client-send-receive-reply" $ endpointMultipleClientSendReceiveReply _log newTCPTransport6 newTCPAddress6,
     testCase "tcp6-multiple-send-receive-reply" $ whenIPv6 $ endpointMultipleSendReceiveReply _log newTCPTransport6 newTCPAddress6,
     testCase "tcp6-local-send-receive-reply" $ whenIPv6 $ endpointLocalSendReceiveReply _log newTCPTransport6 newTCPAddress6
+    -}
   ]
 
 testEndpointTransport :: (Resolver -> IO Transport) -> Assertion

@@ -2,11 +2,23 @@ module TestUtils
     ( newTCPAddress
     , newUDPAddress
     , newTCPAddress6
-    , newUDPAddress6)
+    , newUDPAddress6
+    , timeBound
+    , troubleshoot)
     where
 
+-- local imports
+
+-- external imports
+import Control.Concurrent
+import Control.Concurrent.Async
 import Control.Exception
 import qualified Network.Socket as NS
+import System.Log.Logger
+import Test.HUnit
+
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 newTCPAddress :: IO String
 newTCPAddress = do
@@ -51,3 +63,14 @@ isPrivileged :: NS.SockAddr -> Bool
 isPrivileged (NS.SockAddrInet (NS.PortNum p) _) = p < 1025
 isPrivileged (NS.SockAddrInet6 (NS.PortNum p) _ _ _) = p < 1025
 isPrivileged (NS.SockAddrUnix _) = False
+
+timeBound :: Int -> IO () -> IO ()
+timeBound delay action = do
+    outcome <- race (threadDelay delay) action
+    assertBool "Test should not block" $ outcome == Right ()
+
+troubleshoot :: IO () -> IO ()
+troubleshoot fn = do
+    finally (do
+        updateGlobalLogger rootLoggerName (setLevel INFO)
+        fn) (updateGlobalLogger rootLoggerName (setLevel WARNING))

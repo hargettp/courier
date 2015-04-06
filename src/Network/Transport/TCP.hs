@@ -1,12 +1,12 @@
+{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveGeneric #-}
 
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Network.Transport.TCP
 -- Copyright   :  (c) Phil Hargett 2013
 -- License     :  MIT (see LICENSE file)
--- 
+--
 -- Maintainer  :  phil@haphazardhouse.net
 -- Stability   :  experimental
 -- Portability :  non-portable (uses STM)
@@ -29,25 +29,25 @@ module Network.Transport.TCP (
 
 -- local imports
 
-import Network.Transport
-import Network.Transport.Internal
-import Network.Transport.Sockets
+import           Network.Transport
+import           Network.Transport.Internal
+import           Network.Transport.Sockets
 
 -- external imports
 
-import Control.Concurrent.Async
-import Control.Concurrent.STM
-import Control.Exception
+import           Control.Concurrent.Async
+import           Control.Concurrent.STM
+import           Control.Exception
 
-import qualified Data.ByteString as B
-import qualified Data.Map as M
-import Data.Serialize
-import qualified Data.Set as S
+import qualified Data.ByteString            as B
+import qualified Data.Map                   as M
+import           Data.Serialize
+import qualified Data.Set                   as S
 
-import qualified Network.Socket as NS
-import qualified Network.Socket.ByteString as NSB
+import qualified Network.Socket             as NS
+import qualified Network.Socket.ByteString  as NSB
 
-import System.Log.Logger
+import           System.Log.Logger
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -127,7 +127,8 @@ tcpDispatch transport family address client socketAddress = do
         Just (IdentifyMessage clientAddress) -> do
             infoM _log $ "Identified " ++ (show clientAddress)
             newConn <- (newTCPConnection family) clientAddress
-            atomically $ putTMVar (connSocket newConn) client
+            -- atomically $ putTMVar (connSocket newConn) $ SocketRef 0 client
+            setConnectedSocket (connSocket newConn) client
             msngr <- newMessenger newConn (socketInbound transport)
             replaceMessenger transport clientAddress msngr
 
@@ -151,31 +152,36 @@ tcpUnbind sockets address = do
 
 newTCPConnection :: NS.Family -> Address -> IO Connection
 newTCPConnection family address = do
-    sock <- atomically $ newEmptyTMVar
+    var <- atomically $ newSocketVar
     return Connection {
         connAddress = address,
-        connSocket = sock,
+        connSocket = var,
         connConnect = do
             socket <- NS.socket family NS.Stream NS.defaultProtocol
             sockAddr <- lookupTCPAddress address family
             NS.connect socket sockAddr
+            infoM _log $ "Initiated socket connection to " ++ (show sockAddr)
             -- NS.connect socket $ NS.addrAddress $ head ipv4Addrs
-            atomically $ putTMVar sock socket
+            -- atomically $ putTMVar sock $ SocketRef 0 socket
+            setConnectedSocket var socket
             -- infoM _log $ "Initiated socket connection to " ++ (show $ head ipv4Addrs)
             return socket,
         connSend = tcpSend address,
         connReceive = receiveSocketBytes,
         connClose = do
             infoM _log $ "Closing connection to " ++ address
-            open <- atomically $ tryTakeTMVar sock
-            case open of
+            forceCloseConnectedSocket var
+            {-
+            state <- atomically $ tryTakeTMVar var
+            case socketStateSocket state of
                 Just socket -> do
-                    infoM _log $ "Closing socket " ++ (show socket) ++ " for " ++ address
-                    NS.sClose socket
-                    infoM _log $ "Closed socket " ++ (show socket) ++ " for " ++ address
+                    infoM _log $ "Closing socket " ++ (show $ socketRefSocket socket) ++ " for " ++ address
+                    NS.sClose $ socketRefSocket socket
+                    infoM _log $ "Closed socket " ++ (show $ socketRefSocket socket) ++ " for " ++ address
                 Nothing -> do
                     infoM _log $ "No socket to close for " ++ address
                     return ()
+            -}
             infoM _log $ "Connection to " ++ address ++ " closed"
         }
 

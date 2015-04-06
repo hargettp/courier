@@ -1,12 +1,12 @@
+{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveGeneric #-}
 
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Network.Transport.Sockets
 -- Copyright   :  (c) Phil Hargett 2013
 -- License     :  MIT (see LICENSE file)
--- 
+--
 -- Maintainer  :  phil@haphazardhouse.net
 -- Stability   :  experimental
 -- Portability :  non-portable (uses STM)
@@ -24,6 +24,15 @@ module Network.Transport.Sockets (
     bindAddress,
     unbindAddress,
     closeBindings,
+
+    SocketRef(..),
+    SocketVar,
+    newSocketVar,
+    setConnectedSocket,
+    closeConnectedSocket,
+    forceCloseConnectedSocket,
+    connected,
+    disconnected,
 
     SocketTransport(..),
     SocketConnectionFactory,
@@ -77,8 +86,8 @@ import qualified Data.Text as T
 
 import GHC.Generics
 
-import Network.Socket hiding (recv,socket,bind,sendTo,shutdown)
-import qualified Network.Socket.ByteString as NSB
+import Network.Socket hiding (bind, recv, sendTo,shutdown, socket)
+import qualified Network.Socket.ByteString  as NSB
 
 import System.Log.Logger
 
@@ -119,13 +128,13 @@ newSocketTransport resolver socketScheme binder connectionFactory messengerFacto
 type Bindings = TVar (M.Map Name (Mailbox Message))
 
 data SocketBinding = SocketBinding {
-    socketCount :: TVar Int,
-    socketSocket :: TMVar Socket,
+    socketCount    :: TVar Int,
+    socketSocket   :: TMVar Socket,
     socketListener :: TMVar (Async ())
 }
 
 socketTransportHandles :: SocketTransport -> Name -> IO Bool
-socketTransportHandles transport name = do 
+socketTransportHandles transport name = do
   resolved <- resolve (socketResolver transport) name
   return $ isJust resolved
   where
@@ -198,14 +207,32 @@ unbindAddress bindings address = do
             infoM _log $ "Closed binding for " ++ (show address)
 
 data SocketTransport = SocketTransport {
-  socketMessengers :: TVar (M.Map Address Messenger),
-  socketBindings :: Bindings,
-  socketConnection :: Address -> IO Connection,
-  socketMessenger :: Connection -> Mailbox Message -> IO Messenger,
-  socketInbound :: Mailbox Message,
+  socketMessengers  :: TVar (M.Map Address Messenger),
+  socketBindings    :: Bindings,
+  socketConnection  :: Address -> IO Connection,
+  socketMessenger   :: Connection -> Mailbox Message -> IO Messenger,
+  socketInbound     :: Mailbox Message,
   socketDispatchers :: S.Set (Async ()),
-  socketResolver :: Resolver
+  socketResolver    :: Resolver
 }
+
+data SocketRef = SocketRef {
+    socketRefVersion :: Integer,
+    socketRefSocket  :: Socket
+}
+
+type SocketVar = TMVar SocketState
+
+newSocketVar :: STM SocketVar
+newSocketVar = newTMVar $ SocketState {
+        socketStateVersion = 0,
+        socketStateSocket = Nothing
+    }
+
+data SocketState = SocketState {
+    socketStateVersion :: Integer,
+    socketStateSocket  :: Maybe Socket
+    }
 
 {-|
 A connection specializes the use of a transport for a particular
@@ -213,26 +240,92 @@ destination.
 -}
 data Connection = Connection {
   connAddress :: Address,
-  connSocket :: TMVar Socket,
+  connSocket  :: SocketVar,
   connConnect :: IO Socket,
-  connSend :: Socket -> B.ByteString -> IO (),
+  connSend    :: Socket -> B.ByteString -> IO (),
   connReceive :: Socket -> Int -> IO (Maybe B.ByteString),
-  connClose :: IO ()
+  connClose   :: IO ()
   }
 
+connected :: SocketVar -> STM SocketRef
+connected var = do
+    state <- readTMVar var
+    case socketStateSocket state of
+        Nothing -> retry
+        Just socket -> return SocketRef {
+            socketRefVersion = socketStateVersion state,
+            socketRefSocket = socket
+        }
+
+disconnected :: SocketVar -> STM ()
+disconnected var = do
+    state <- readTMVar var
+    case socketStateSocket state of
+        Nothing -> return ()
+        Just _ -> do
+            retry
+
+setConnectedSocket :: SocketVar -> Socket -> IO ()
+setConnectedSocket var socket = atomically $ do
+    state <- readTMVar var
+    -- atomically $ putTMVar (connSocket conn) $ SocketRef 0 socket
+    putTMVar var $ state {
+        socketStateVersion = 1 + (socketStateVersion state),
+        socketStateSocket = Just socket
+        }
+
+closeConnectedSocket :: SocketVar -> SocketRef -> IO ()
+closeConnectedSocket var ref = do
+    maybeOldSocket <- atomically $ do
+        state <- readTMVar var
+        case socketStateSocket state of
+            Nothing -> return Nothing
+            Just socket -> do
+                if (socketRefVersion ref) == (socketStateVersion state) then
+                    -- atomically $ putTMVar (connSocket conn) $ SocketRef 0 socket
+                    putTMVar var $ state {
+                        socketStateVersion = 1 + (socketStateVersion state),
+                        socketStateSocket = Nothing
+                        }
+                else
+                    return ()
+                return $ socketStateSocket state
+    case maybeOldSocket of
+        Nothing -> return ()
+        Just socket -> sClose socket
+
+forceCloseConnectedSocket :: SocketVar -> IO ()
+forceCloseConnectedSocket var = do
+    maybeOldSocket <- atomically $ do
+        state <- readTMVar var
+        case socketStateSocket state of
+            Nothing -> return Nothing
+            Just socket -> do
+                -- atomically $ putTMVar (connSocket conn) $ SocketRef 0 socket
+                putTMVar var $ state {
+                    socketStateVersion = 1 + (socketStateVersion state),
+                    socketStateSocket = Nothing
+                    }
+                return $ socketStateSocket state
+    case maybeOldSocket of
+        Nothing -> return ()
+        Just socket -> sClose socket
+
+
 {-|
-A messenger is a facility that actual uses the mechanisms of a transport
+A messenger is a facility that actually uses the mechanisms of a transport
 (and more specifically, of a connection on a transport) to deliver and receive
 messages. The messenger uses 'Mailbox'es internally so that the sending/receiving
 happens asynchronously, allowing applications to move on without regard for
 when any send / receive action actually completes.
 -}
 data Messenger = Messenger {
-    messengerDone :: TVar Bool,
-    messengerOut :: Mailbox Message,
-    messengerAddress :: Address,
-    messengerSender :: Async (),
-    messengerReceiver :: Async (),
+    messengerDone       :: TVar Bool,
+    messengerOut        :: Mailbox Message,
+    messengerAddress    :: Address,
+    messengerSender     :: Async (),
+    messengerConnector  :: Async (),
+    messengerReceiver   :: Async (),
     messengerConnection :: Connection
     }
 
@@ -248,8 +341,8 @@ hostname component is missing from the identifier (e.g., just @:port@), then hos
 is assumed to be @localhost@.
 -}
 parseSocketAddress :: Address -> (HostName,ServiceName)
-parseSocketAddress address = 
-  let identifer = T.pack $ address 
+parseSocketAddress address =
+  let identifer = T.pack $ address
       parts = T.splitOn ":" identifer
   in if (length parts) > 1 then
        (host $ T.unpack $ parts !! 0, port $ T.unpack $ parts !! 1)
@@ -291,12 +384,14 @@ newMessenger conn inc = do
   out <- atomically $ newMailbox
   done <- atomically $ newTVar False
   sndr <- async $ sender conn done out
+  connr <- async $ connector conn out done
   rcvr <- async $ receiver conn done inc
   return Messenger {
     messengerDone = done,
     messengerOut = out,
     messengerAddress = connAddress conn,
     messengerSender = sndr,
+    messengerConnector = connr,
     messengerReceiver = rcvr,
     messengerConnection = conn
     }
@@ -343,58 +438,62 @@ dispatcher bindings mbox = dispatchMessages
         Left err -> do
           errorM _log $ "Error decoding message for dispatch: " ++ err
           return ()
-        Right (Envelope destination msg) -> do 
-          atomically $ do 
+        Right (Envelope destination msg) -> do
+          atomically $ do
             dests <- readTVar bindings
             let maybeDest = M.lookup destination dests
             case maybeDest of
               Nothing -> return ()
-              Just dest -> do 
+              Just dest -> do
                 writeMailbox dest msg
                 return ()
+
+connector :: Connection -> Mailbox Message -> TVar Bool -> IO ()
+connector conn mbox done = do
+    infoM _log $ "Connecting on " ++ (show $ connAddress conn)
+    atomically $ do
+        disconnected $ connSocket conn
+        -- maybeMessage <- tryPeekMailbox mbox
+        -- case maybeMessage of
+        --     Nothing -> retry
+        --     Just _ -> return ()
+    infoM _log $ "Disconnected on " ++ (show $ connAddress conn)
+    isDone <- atomically $ readTVar done
+    if isDone then
+        return ()
+    else do
+        connect
+        connector conn mbox done
+    where
+        connect = do
+            let (host,port) = parseSocketAddress $ connAddress conn
+            infoM _log $ "Connecting to " ++ (show host) ++ ":" ++ (show port) -- (show address)
+            socket <- connConnect conn
+            infoM _log $ "Connected to " ++ (show $ connAddress conn)
+            -- atomically $ putTMVar (connSocket conn) $ SocketRef 0 socket
+            setConnectedSocket (connSocket conn) socket
 
 sender :: Connection -> TVar Bool -> Mailbox Message -> IO ()
 sender conn done mailbox = sendMessages
   where
     sendMessages = do
-      reconnect
+      infoM _log $ "Waiting for connection to " ++ (show $ connAddress conn)
+      socket <- atomically $ connected $ connSocket conn
       catchExceptions (do
                 infoM _log $ "Waiting to send to " ++ (show $ connAddress conn)
                 msg <- atomically $ readMailbox mailbox
                 infoM _log $ "Sending message to " ++ (show $ connAddress conn)
-                connected <- atomically $ tryReadTMVar $ connSocket conn
-                case connected of
-                  Just socket -> do
-                      (connSend conn) socket msg
-                  Nothing -> return ()
-            )
+                (connSend conn) (socketRefSocket socket) msg
+                )
             (\e -> do
                 warningM _log $ "Send error: " ++ (show (e :: SomeException))
-                disconnect)
+                disconnect socket)
       isDone <- atomically $ readTVar done
-      if isDone 
+      if isDone
         then return ()
         else sendMessages
-    reconnect = do
-      -- TODO need a timeout here, in case connecting always fails
-      infoM _log $ "Reconnecting to " ++ (show $ connAddress conn)
-      connected <- atomically $ tryReadTMVar $ connSocket conn
-      case connected of
-        Just _ -> do
-          infoM _log $ "Reconnected to " ++ (show $ connAddress conn)
-          return ()
-        Nothing -> do
-          let (host,port) = parseSocketAddress $ connAddress conn
-          infoM _log $ "Connecting to " ++ (show host) ++ ":" ++ (show port) -- (show address)
-          socket <- connConnect conn
-          infoM _log $ "Connected to " ++ (show $ connAddress conn)
-          atomically $ putTMVar (connSocket conn) socket
-    disconnect = do
-      connected <- atomically $ tryTakeTMVar $ connSocket conn
-      case connected of
-        Just socket -> sClose socket
-        Nothing -> return ()
-
+      where
+          disconnect socket = closeConnectedSocket (connSocket conn) socket
 
 socketSendTo :: SocketTransport -> Name -> Message -> IO ()
 socketSendTo transport name msg = do
@@ -435,19 +534,19 @@ socketSendTo transport name msg = do
         Just msngr -> deliver msngr env
 
 receiver :: Connection -> TVar Bool -> Mailbox Message -> IO ()
-receiver conn done mailbox  = do 
-    socket <- atomically $ readTMVar $ connSocket conn
+receiver conn done mailbox  = do
+    socket <- atomically $ connected $ connSocket conn
     receiveSocketMessages socket done (connAddress conn) mailbox
 
-receiveSocketMessages :: Socket -> TVar Bool -> Address -> Mailbox Message -> IO ()
-receiveSocketMessages sock done addr mailbox = do 
+receiveSocketMessages :: SocketRef -> TVar Bool -> Address -> Mailbox Message -> IO ()
+receiveSocketMessages sock done addr mailbox = do
     catchExceptions (do
           infoM _log $ "Waiting to receive on " ++ (show addr)
-          maybeMsg <- receiveSocketMessage sock
+          maybeMsg <- receiveSocketMessage $ socketRefSocket sock
           infoM _log $ "Received message on " ++ (show addr)
           case maybeMsg of
             Nothing -> do
-              sClose sock
+              sClose $ socketRefSocket sock
               return ()
             Just msg -> do
               atomically $ writeMailbox mailbox msg
@@ -465,12 +564,12 @@ receiveSocketMessages sock done addr mailbox = do
 
 receiveSocketMessage :: Socket -> IO (Maybe B.ByteString)
 receiveSocketMessage socket = do
-  maybeLen <- receiveSocketBytes socket 8 -- TODO must figure out what defines length of an integer in bytes 
+  maybeLen <- receiveSocketBytes socket 8 -- TODO must figure out what defines length of an integer in bytes
   case maybeLen of
     Nothing -> do
       infoM _log $ "No length received"
       return Nothing
-    Just len -> do 
+    Just len -> do
       maybeMsg <- receiveSocketBytes socket $ msgLength (decode len)
       infoM _log $ "Received message"
       return maybeMsg
@@ -489,6 +588,7 @@ closeMessenger :: Messenger -> IO ()
 closeMessenger msngr = do
   infoM _log $ "Closing mesenger to " ++ (messengerAddress msngr)
   atomically $ modifyTVar (messengerDone msngr) (\_ -> True)
+  cancel $ messengerConnector msngr
   cancel $ messengerSender msngr
   cancel $ messengerReceiver msngr
   connClose $ messengerConnection msngr

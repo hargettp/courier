@@ -100,10 +100,10 @@ udpBind family transport sockets inc name = do
 
 newUDPConnection :: NS.Family -> Address -> IO Connection
 newUDPConnection family address = do
-  sock <- atomically newEmptyTMVar
+  var <- atomically newEmptyTMVar
   return Connection {
     connAddress = address,
-    connSocket = sock,
+    connSocket = var,
     connConnect = NS.socket family NS.Datagram NS.defaultProtocol,
     connSend = (\s bs -> do
         addr <- lookupUDPAddress address family
@@ -112,10 +112,13 @@ newUDPConnection family address = do
         infoM _log $ "Sent via UDP to " ++ (show addr)),
     connReceive = udpRecvFrom,
     connClose = do
+        forceCloseConnectedSocket var
+        {-
         maybeSocket <- atomically $ tryTakeTMVar sock
         case maybeSocket of
-            Just s -> NS.sClose s
+            Just s -> NS.sClose $ socketRefSocket s
             Nothing -> return ()
+        -}
         return ()
     }
 
