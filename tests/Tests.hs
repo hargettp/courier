@@ -44,11 +44,11 @@ tests =
     testCase "hunit" (assertBool "HUnit assertion of truth is false" True),
     testCase "endpoints" testEndpoint
   ]
-  ++ MB.tests
-  ++ M.tests
+  -- ++ MB.tests
+  -- ++ M.tests
   ++ T.tests
-  ++ U.tests
-  ++ R.tests
+  -- ++ U.tests
+  -- ++ R.tests
 
 -- Endpoint tests
 

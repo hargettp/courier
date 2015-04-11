@@ -102,7 +102,7 @@ endpointSendReceive _log newTransport newAddress = do
   let resolver = resolverFromList [(name1,address1),
                                (name2,address2)]
   bracketTest _log resolver newTransport $ \transport1 transport2 -> do 
-      endpoint1 <- newEndpoint [transport1]
+      endpoint1 <- newEndpoint [transport1] 
       endpoint2 <- newEndpoint [transport2]
       Right () <- bindEndpoint endpoint1 name1
       Right () <- bindEndpoint endpoint2 name2
@@ -156,28 +156,44 @@ endpointMultipleClientSendReceiveReply _log newTransport newAddress = do
       name2 = "endpoint2"
   let resolver = resolverFromList [(name1,address1),
                                    (name2,address2)]
-  bracket (newTransport resolver)
-    shutdown $ \transport1 -> do
+  bracket 
+    (newTransport resolver)
+    shutdown $ 
+    \transport1 -> do
         endpoint1 <- newEndpoint [transport1]
         Right () <- bindEndpoint endpoint1 name1
         pause
-        bracket (newTransport resolver)
-            shutdown $ \transport2 -> do
+        bracket 
+            (newTransport resolver)
+            shutdown $ 
+            \transport2 -> do
                 endpoint2 <- newEndpoint [transport2]
                 Right () <- bindEndpoint endpoint2 name2
                 pause
                 
+                infoM _log "Testing with client 1 started"
+
                 verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"
                 verifiedSend _log endpoint2 endpoint1 name2 name1 "hi!"
+
+                infoM _log "Testing with client 1 finished"
+                
         pause
-        bracket (newTransport resolver)
-            shutdown $ \transport2 -> do
+        bracket 
+            (newTransport resolver)
+            shutdown 
+            $ \transport2 -> do
                 endpoint2 <- newEndpoint [transport2]
                 Right () <- bindEndpoint endpoint2 name2
                 pause
                 
+                infoM _log "Testing with client 2 started"
+
                 verifiedSend _log endpoint1 endpoint2 name1 name2 "hello"
                 verifiedSend _log endpoint2 endpoint1 name2 name1 "hi!"
+
+                infoM _log "Testing with client 2 finished"
+                
     
   bracketTest _log resolver newTransport $ \transport1 transport2 -> do 
       endpoint1 <- newEndpoint [transport1]
