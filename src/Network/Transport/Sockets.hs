@@ -292,9 +292,7 @@ socketSendTo transport name msg = do
         Nothing -> do
           msngrs <- atomically $ readTVar $ socketMessengers transport
           infoM _log $ "No messenger for " ++ (show address) ++ " in " ++ (show msngrs)
-          socketVar <- atomically $ newSocketVar
-          newConn <- (socketConnection transport) address
-          let conn = newConn {connSocket = socketVar}
+          conn <- (socketConnection transport) address
           msngr <- (socketMessenger transport) conn (socketInbound transport)
           addMessenger transport address msngr
           deliver msngr env

@@ -75,7 +75,6 @@ disconnected var = do
 setConnectedSocket :: SocketVar -> Socket -> IO ()
 setConnectedSocket var socket = atomically $ do
     state <- readTVar var
-    -- atomically $ putTMVar (connSocket conn) $ SocketRef 0 socket
     writeTVar var $ state {
         socketStateVersion = 1 + (socketStateVersion state),
         socketStateSocket = Just socket
@@ -89,7 +88,6 @@ closeConnectedSocket var ref = do
             Nothing -> return Nothing
             Just _ -> do
                 if (socketRefVersion ref) == (socketStateVersion state) then
-                    -- atomically $ putTMVar (connSocket conn) $ SocketRef 0 socket
                     writeTVar var $ state {
                         socketStateVersion = 1 + (socketStateVersion state),
                         socketStateSocket = Nothing
@@ -108,7 +106,6 @@ forceCloseConnectedSocket var = do
         case socketStateSocket state of
             Nothing -> return Nothing
             Just _ -> do
-                -- atomically $ putTMVar (connSocket conn) $ SocketRef 0 socket
                 writeTVar var $ state {
                     socketStateVersion = 1 + (socketStateVersion state),
                     socketStateSocket = Nothing
