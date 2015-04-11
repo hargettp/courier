@@ -165,7 +165,7 @@ newTCPConnection family address = do
             infoM _log $ "Initiated socket connection to " ++ (show sockAddr)
             -- NS.connect socket $ NS.addrAddress $ head ipv4Addrs
             -- atomically $ putTMVar sock $ SocketRef 0 socket
-            setConnectedSocket var socket
+            -- setConnectedSocket var socket
             -- infoM _log $ "Initiated socket connection to " ++ (show $ head ipv4Addrs)
             return socket,
         connSend = tcpSend address,
