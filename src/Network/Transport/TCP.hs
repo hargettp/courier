@@ -190,14 +190,16 @@ newTCPConnection family address = do
 newTCPMessenger :: Bindings -> Resolver -> Connection -> Mailbox Message -> IO Messenger
 newTCPMessenger bindings resolver conn mailbox = do
     msngr <- newMessenger conn mailbox
-    identifyAll msngr
+    tcpIdentifySender bindings resolver msngr
     return msngr
+
+tcpIdentifySender :: Bindings -> Resolver -> Messenger -> IO ()
+tcpIdentifySender bindings resolver msngr = do
+    bs <- atomically $ readTVar bindings
+    boundAddresses <- mapM (resolve resolver) (M.keys bs)
+    let uniqueAddresses = S.toList $ S.fromList boundAddresses
+    mapM_ (identify msngr) uniqueAddresses
     where
-        identifyAll msngr = do
-            bs <- atomically $ readTVar bindings
-            boundAddresses <- mapM (resolve resolver) (M.keys bs)
-            let uniqueAddresses = S.toList $ S.fromList boundAddresses
-            mapM_ (identify msngr) uniqueAddresses
         identify msngr maybeUniqueAddress= do
             case maybeUniqueAddress of
                 Nothing -> return()
