@@ -5,7 +5,7 @@
 -- Module      :  Network.Transport.UDP
 -- Copyright   :  (c) Phil Hargett 2013
 -- License     :  MIT (see LICENSE file)
--- 
+--
 -- Maintainer  :  phil@haphazardhouse.net
 -- Stability   :  experimental
 -- Portability :  non-portable (uses STM)
@@ -16,9 +16,9 @@
 -- 'Endpoint's, dynamically opening / closing new sockets as needed to deliver
 -- messages to other 'Endpoint's using UDP transports.
 --
--- There is no reuse of sockets on the sending side, so while messages will be 
+-- There is no reuse of sockets on the sending side, so while messages will be
 -- received on a known bound port, the remote sending port will vary arbitrarily.
--- 
+--
 -- This transport only reads at most 512 bytes from incoming packets: constraining
 -- the packet size avoids fragmentation.  Applications using this transport should take
 -- responsibility for fragmentation, reassembly, retransmission of lost packets,
@@ -114,12 +114,6 @@ newUDPConnection family address = do
     connReceive = udpRecvFrom,
     connClose = do
         forceCloseConnectedSocket var
-        {-
-        maybeSocket <- atomically $ tryTakeTMVar sock
-        case maybeSocket of
-            Just s -> NS.sClose $ socketRefSocket s
-            Nothing -> return ()
-        -}
         return ()
     }
 
@@ -129,7 +123,7 @@ newUDPMessenger _ _ conn mailbox = do
     return msngr
 
 udpReceiveSocketMessages :: NS.Socket -> Address -> Mailbox Message -> IO ()
-udpReceiveSocketMessages sock addr mailbox = catchExceptions 
+udpReceiveSocketMessages sock addr mailbox = catchExceptions
     (do
         infoM _log $ "Waiting to receive via UDP on " ++ (show addr)
         maybeMsg <- udpReceiveSocketMessage
@@ -140,7 +134,7 @@ udpReceiveSocketMessages sock addr mailbox = catchExceptions
                 return ()
             Just msg -> do
                 atomically $ writeMailbox mailbox msg
-                udpReceiveSocketMessages sock addr mailbox) 
+                udpReceiveSocketMessages sock addr mailbox)
     (\e -> do
         warningM _log $ "Receive error: " ++ (show (e :: SomeException)))
     where

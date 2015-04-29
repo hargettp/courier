@@ -1,10 +1,10 @@
 name:                courier
 version:             0.1.0.15
 synopsis:           A message-passing library for simplifying network applications
-description:         Inspired by Erlang's simple message-passing facilities, courier provides roughly similar 
-                     capabilities. Applications simply create one or more endpoints, 
-                     bind each to a transport using a given name, then can freely 
-                     send / receive messages to other endpoints just by referencing the name each endpoint 
+description:         Inspired by Erlang's simple message-passing facilities, courier provides roughly similar
+                     capabilities. Applications simply create one or more endpoints,
+                     bind each to a transport using a given name, then can freely
+                     send / receive messages to other endpoints just by referencing the name each endpoint
                      bound to its transport.
                      .
                      A primary driver of this package's design is separation of concerns: many algorithms
@@ -14,12 +14,12 @@ description:         Inspired by Erlang's simple message-passing facilities, cou
                      the distributed algorithm itself.  With this in mind, this package aims
                      to provide a variety of transports as well as support for common communication
                      idioms (e.g., in order message delivery, selective out of order message delivery,
-                     synchronous RPC, etc.). 
+                     synchronous RPC, etc.).
                      .
                      Applications may process messages in the order received at an endpoint, or use
                      selective message reception to process the first message arriving at an endpoint
                      that also matches a provided selection function. Through selective message reception,
-                     applications may approximate the style of an Erlang application, and enjoy better 
+                     applications may approximate the style of an Erlang application, and enjoy better
                      composability of message reception with multiple independent dispatch routines or
                       message pumps.
 
@@ -65,6 +65,9 @@ library
   other-modules:
                   Network.Transport.Internal
                   Network.Transport.Sockets
+                  Network.Transport.Sockets.Addresses
+                  Network.Transport.Sockets.Connections
+                  Network.Transport.Sockets.Messengers
   build-depends:       base >=4.6 && <5,
                        async,
                        bytestring,
@@ -80,12 +83,12 @@ Test-Suite test-courier
     type: exitcode-stdio-1.0
     hs-source-dirs: tests
     main-is: Tests.hs
-    build-depends: 
+    build-depends:
 
         -- base modules
-        base, 
+        base,
         -- testing support
-        HUnit, 
+        HUnit,
         test-framework,
         test-framework-hunit,
         -- Cabal,

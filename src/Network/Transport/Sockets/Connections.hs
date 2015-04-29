@@ -3,7 +3,7 @@
 -- Module      :  Network.Transport.Sockets.Connections
 -- Copyright   :  (c) Phil Hargett 2014
 -- License     :  MIT (see LICENSE file)
--- 
+--
 -- Maintainer  :  phil@haphazardhouse.net
 -- Stability   :  experimental
 -- Portability :  non-portable (requires STM)
@@ -87,13 +87,12 @@ closeConnectedSocket var ref = do
         case socketStateSocket state of
             Nothing -> return Nothing
             Just _ -> do
-                if (socketRefVersion ref) == (socketStateVersion state) then
-                    writeTVar var $ state {
+                if (socketRefVersion ref) == (socketStateVersion state)
+                  then writeTVar var $ state {
                         socketStateVersion = 1 + (socketStateVersion state),
                         socketStateSocket = Nothing
                         }
-                else
-                    return ()
+                  else return ()
                 return $ socketStateSocket state
     case maybeOldSocket of
         Nothing -> return ()

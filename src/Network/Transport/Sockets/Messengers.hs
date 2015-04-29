@@ -3,7 +3,7 @@
 -- Module      :  Network.Transport.Sockets.Messengers
 -- Copyright   :  (c) Phil Hargett 2014
 -- License     :  MIT (see LICENSE file)
--- 
+--
 -- Maintainer  :  phil@haphazardhouse.net
 -- Stability   :  experimental
 -- Portability :  non-portable (requires STM)
@@ -179,13 +179,13 @@ connector conn mbox done = do
         --     Just _ -> return ()
     infoM _log $ "Disconnected on " ++ (show $ connAddress conn)
     isDone <- atomically $ readTVar done
-    if isDone then
-        return ()
-    else do
-        let (host,port) = parseSocketAddress $ connAddress conn
-        infoM _log $ "Connecting to " ++ (show host) ++ ":" ++ (show port) -- (show address)
-        socket <- connConnect conn
-        infoM _log $ "Connected to " ++ (show $ connAddress conn)
-        -- atomically $ putTMVar (connSocket conn) $ SocketRef 0 socket
-        setConnectedSocket (connSocket conn) socket
-        connector conn mbox done
+    if isDone
+      then return ()
+      else do
+          let (host,port) = parseSocketAddress $ connAddress conn
+          infoM _log $ "Connecting to " ++ (show host) ++ ":" ++ (show port) -- (show address)
+          socket <- connConnect conn
+          infoM _log $ "Connected to " ++ (show $ connAddress conn)
+          -- atomically $ putTMVar (connSocket conn) $ SocketRef 0 socket
+          setConnectedSocket (connSocket conn) socket
+          connector conn mbox done
