@@ -38,7 +38,7 @@ tests =
     -}
 
     testCase "tcp-multiple-client-send-receive-reply" $ timeBound (10 * testDelay) $ 
-        troubleshoot $ endpointMultipleClientSendReceiveReply _log newTCPTransport newTCPAddress --,
+        troubleshoot $ endpointMultipleServerSendReceiveReply _log newTCPTransport newTCPAddress --,
     
     {-
     testCase "tcp-multiple-send-receive-reply" $ timeBound maxTestDelay $ endpointMultipleSendReceiveReply _log newTCPTransport newTCPAddress,

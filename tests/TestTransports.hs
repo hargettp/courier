@@ -9,7 +9,7 @@ module TestTransports (
     endpointSendReceive,
     endpointDoubleSendReceive,
     endpointSendReceiveReply,
-    endpointMultipleClientSendReceiveReply,
+    endpointMultipleServerSendReceiveReply,
     endpointLocalSendReceiveReply,
     endpointMultipleSendReceiveReply
 ) where
@@ -147,8 +147,8 @@ endpointDoubleSendReceive _log newTransport newAddress = do
       return ()
   infoM _log "Finished double-send-receive test"
 
-endpointMultipleClientSendReceiveReply :: String -> (Resolver -> IO Transport) -> IO Address -> Assertion
-endpointMultipleClientSendReceiveReply _log newTransport newAddress = do
+endpointMultipleServerSendReceiveReply :: String -> (Resolver -> IO Transport) -> IO Address -> Assertion
+endpointMultipleServerSendReceiveReply _log newTransport newAddress = do
   infoM _log "Starting send-receive-reply test"
   address1 <- newAddress
   address2 <- newAddress
