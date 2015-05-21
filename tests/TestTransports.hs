@@ -46,10 +46,11 @@ pause = threadDelay testDelay
 
 whenIPv6 :: Assertion -> Assertion
 whenIPv6 assn = do
-    addresses <- lookupAddresses NS.AF_INET6 NS.Stream "localhost:1"
+    addresses <- catch (lookupAddresses NS.AF_INET6 NS.Stream "tcp://[::1]:1")
+                       ((\_ -> return []) :: (IOException -> IO [NS.SockAddr]))
     case addresses of
         [] -> do
-            warningM _log $ "IPv6 not available"
+            warningM _log "IPv6 not available"
             return ()
         _ -> assn
 
