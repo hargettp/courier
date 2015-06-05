@@ -198,9 +198,9 @@ tcpIdentifySender bindings resolver msngr = do
     bs <- atomically $ readTVar bindings
     boundAddresses <- mapM (resolve resolver) (M.keys bs)
     let uniqueAddresses = S.toList $ S.fromList boundAddresses
-    mapM_ (identify msngr) uniqueAddresses
+    mapM_ identify uniqueAddresses
     where
-        identify msngr maybeUniqueAddress= do
+        identify maybeUniqueAddress= do
             case maybeUniqueAddress of
                 Nothing -> return()
                 Just uniqueAddress -> deliver msngr $ encode $ IdentifyMessage uniqueAddress

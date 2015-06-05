@@ -55,5 +55,5 @@ testEndpointTransport = do
   bracket (newUDPTransport resolver)
           shutdown
           (\transport -> do 
-            _ <- newEndpoint [transport]
+            _ <- newEndpoint transport
             return ())

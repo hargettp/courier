@@ -18,8 +18,8 @@ main = do
         resolver = resolverFromList [(name1,"localhost:2000"),
                                 (name2,"localhost:2001")]
     transport <- newTCPTransport resolver
-    endpoint1 <- newEndpoint [transport]
-    endpoint2 <- newEndpoint [transport]
+    endpoint1 <- newEndpoint transport
+    endpoint2 <- newEndpoint transport
     Right () <- bindEndpoint endpoint1 name1
     Right () <- bindEndpoint endpoint2 name2
     sendMessage_ endpoint1 name2 $ encode "hello world!"

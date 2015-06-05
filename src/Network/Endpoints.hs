@@ -116,7 +116,7 @@ import qualified Data.Map as M
 Endpoints are a locus of communication, used for sending and receive messages.
 -}
 data Endpoint = Endpoint {
-  endpointTransports :: TVar [Transport],
+  endpointTransport :: TVar Transport,
   endpointBindings :: TVar (M.Map Name Binding),
   endpointMailbox :: Mailbox Message
   }
@@ -124,13 +124,13 @@ data Endpoint = Endpoint {
 {-|
 Create a new 'Endpoint' using the provided transports.
 -}
-newEndpoint :: [Transport] -> IO Endpoint
-newEndpoint trans = do
-  transports <- atomically $ newTVar trans
+newEndpoint :: Transport -> IO Endpoint
+newEndpoint transport = do
+  vTransport <- atomically $ newTVar transport
   bindings <- atomically $ newTVar M.empty
   mailbox <- atomically $ newMailbox
   return Endpoint {
-    endpointTransports = transports,
+    endpointTransport = vTransport,
     endpointBindings = bindings,
     endpointMailbox = mailbox
     }
@@ -142,17 +142,14 @@ if failed, @Left text-of-error-message@.
 -}
 bindEndpoint :: Endpoint -> Name -> IO (Either String ())
 bindEndpoint endpoint name = do 
-  maybeTransport <- findTransport endpoint name
-  case maybeTransport of
-    Nothing -> return $ Left $ "No transport to handle name: " ++ (show name)
-    Just transport -> do
-      eitherBinding <- bind transport (endpointMailbox endpoint) name
-      case eitherBinding of
+    transport <- atomically $ readTVar $ endpointTransport endpoint
+    eitherBinding <- bind transport (endpointMailbox endpoint) name
+    case eitherBinding of
         Left err -> return $ Left err
         Right binding -> do 
-          atomically $ modifyTVar (endpointBindings endpoint)
-            (\bindings -> M.insert name binding bindings)
-          return $ Right ()
+            atomically $ modifyTVar (endpointBindings endpoint)
+                (\bindings -> M.insert name binding bindings)
+            return $ Right ()
 
 {-|
 Invoke 'bindEndpoint', but ignore any returned result (success or failure).
@@ -196,12 +193,9 @@ Failure initiating transport is indicated by returning @Left text-of-error-messa
 -}
 sendMessage :: Endpoint -> Name -> Message -> IO (Either String ())
 sendMessage endpoint name msg  = do
-  maybeTransport <- findTransport endpoint name
-  case maybeTransport of
-    Nothing -> return $ Left $ "No transport to handle name: " ++ (show name)
-    Just transport -> do 
-      sendTo transport name msg
-      return $ Right ()
+  transport <- atomically $ readTVar $ endpointTransport endpoint
+  sendTo transport name msg
+  return $ Right ()
 
 {-|
 A variant of 'sendMessage' for use when the return value can be ignored.
@@ -318,16 +312,3 @@ dispatchMessageTimeout endpoint delay testFn handleFn = do
   case resultOrTimeout of
     Left result -> return $ Just result
     Right () -> return Nothing
-
-findTransport :: Endpoint -> Name -> IO (Maybe Transport)
-findTransport endpoint name = do
-  transports <- atomically $ readTVar $ endpointTransports endpoint
-  findM canHandle transports
-    where
-      canHandle transport = (handles transport) name
-      findM mf (a:as) = do
-        result <- mf a
-        if result
-          then return $ Just a
-          else findM mf as
-      findM _ [] = return Nothing

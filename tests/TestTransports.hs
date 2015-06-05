@@ -69,7 +69,7 @@ endpointTransport _log newTransport newAddress = do
   bracket (newTransport resolver)
           shutdown
           (\transport -> do 
-            _ <- newEndpoint [transport]
+            _ <- newEndpoint transport
             return ())
 
 endpointBindUnbind :: String -> (Resolver -> IO Transport) -> IO Address -> Assertion
@@ -84,7 +84,7 @@ endpointBindUnbind _log newTransport newAddress = do
   bracket (newTransport resolver)
           shutdown
           (\transport -> do 
-            endpoint <- newEndpoint [transport]
+            endpoint <- newEndpoint transport
             Right () <- bindEndpoint endpoint name1
             unbound <- unbindEndpoint endpoint name1
             case unbound of
@@ -102,8 +102,8 @@ endpointSendReceive _log newTransport newAddress = do
   let resolver = resolverFromList [(name1,address1),
                                (name2,address2)]
   bracketTest _log resolver newTransport $ \transport1 transport2 -> do 
-      endpoint1 <- newEndpoint [transport1] 
-      endpoint2 <- newEndpoint [transport2]
+      endpoint1 <- newEndpoint transport1
+      endpoint2 <- newEndpoint transport2
       Right () <- bindEndpoint endpoint1 name1
       Right () <- bindEndpoint endpoint2 name2
       pause
@@ -127,9 +127,9 @@ endpointDoubleSendReceive _log newTransport newAddress = do
                                (name2,address2),
                                (name3,address1)]
   bracketTest _log resolver newTransport $ \transport1 transport2 -> do 
-      endpoint1 <- newEndpoint [transport1]
-      endpoint2 <- newEndpoint [transport2]
-      endpoint3 <- newEndpoint [transport1]
+      endpoint1 <- newEndpoint transport1
+      endpoint2 <- newEndpoint transport2
+      endpoint3 <- newEndpoint transport1
       Right () <- bindEndpoint endpoint1 name1
       Right () <- bindEndpoint endpoint2 name2
       Right () <- bindEndpoint endpoint3 name3
@@ -160,14 +160,14 @@ endpointMultipleServerSendReceiveReply _log newTransport newAddress = do
     (newTransport resolver)
     shutdown $ 
     \transport1 -> do
-        endpoint1 <- newEndpoint [transport1]
+        endpoint1 <- newEndpoint transport1
         Right () <- bindEndpoint endpoint1 name1
         pause
         bracket 
             (newTransport resolver)
             shutdown $ 
             \transport2 -> do
-                endpoint2 <- newEndpoint [transport2]
+                endpoint2 <- newEndpoint transport2
                 Right () <- bindEndpoint endpoint2 name2
                 pause
                 
@@ -183,7 +183,7 @@ endpointMultipleServerSendReceiveReply _log newTransport newAddress = do
             (newTransport resolver)
             shutdown 
             $ \transport2 -> do
-                endpoint2 <- newEndpoint [transport2]
+                endpoint2 <- newEndpoint transport2
                 Right () <- bindEndpoint endpoint2 name2
                 pause
                 
@@ -196,8 +196,8 @@ endpointMultipleServerSendReceiveReply _log newTransport newAddress = do
                 
     
   bracketTest _log resolver newTransport $ \transport1 transport2 -> do 
-      endpoint1 <- newEndpoint [transport1]
-      endpoint2 <- newEndpoint [transport2]
+      endpoint1 <- newEndpoint transport1
+      endpoint2 <- newEndpoint transport2
       Right () <- bindEndpoint endpoint1 name1
       Right () <- bindEndpoint endpoint2 name2
       pause
@@ -221,8 +221,8 @@ endpointSendReceiveReply _log newTransport newAddress = do
   let resolver = resolverFromList [(name1,address1),
                                    (name2,address2)]
   bracketTest _log resolver newTransport $ \transport1 transport2 -> do 
-      endpoint1 <- newEndpoint [transport1]
-      endpoint2 <- newEndpoint [transport2]
+      endpoint1 <- newEndpoint transport1
+      endpoint2 <- newEndpoint transport2
       Right () <- bindEndpoint endpoint1 name1
       Right () <- bindEndpoint endpoint2 name2
       pause
@@ -247,8 +247,8 @@ endpointLocalSendReceiveReply _log newTransport newAddress = do
   bracket (newTransport resolver)
     shutdown
     (\transport1 -> do
-        endpoint1 <- newEndpoint [transport1]
-        endpoint2 <- newEndpoint [transport1]
+        endpoint1 <- newEndpoint transport1
+        endpoint2 <- newEndpoint transport1
         Right () <- bindEndpoint endpoint1 name1
         Right () <- bindEndpoint endpoint2 name2
         pause
@@ -272,8 +272,8 @@ endpointMultipleSendReceiveReply _log newTransport newAddress = do
   let resolver = resolverFromList [(name1,address1),
                                    (name2,address2)]
   bracketTest _log resolver newTransport $ \transport1 transport2 -> do
-      endpoint1 <- newEndpoint [transport1]
-      endpoint2 <- newEndpoint [transport2]
+      endpoint1 <- newEndpoint transport1
+      endpoint2 <- newEndpoint transport2
       Right () <- bindEndpoint endpoint1 name1
       Right () <- bindEndpoint endpoint2 name2
       pause
