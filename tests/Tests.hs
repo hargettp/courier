@@ -2,7 +2,7 @@ module Main where
 
 -- local imports
 
-import Network.Endpoints
+
 
 -- external imports
 
@@ -13,8 +13,8 @@ import System.Log.Handler.Simple
 import System.Log.Logger
 
 import Test.Framework
-import Test.HUnit
-import Test.Framework.Providers.HUnit
+
+
 
 -- Test modules
 import qualified TestMailbox as MB
@@ -40,19 +40,9 @@ initLogging = do
 
 tests :: [Test.Framework.Test]
 tests =
-  [
-    testCase "hunit" (assertBool "HUnit assertion of truth is false" True),
-    testCase "endpoints" testEndpoint
-  ]
-  -- ++ MB.tests
-  -- ++ M.tests
+  MB.tests
+  ++ M.tests
   ++ T.tests
-  -- ++ U.tests
-  -- ++ R.tests
+  ++ U.tests
+  ++ R.tests
 
--- Endpoint tests
-
-testEndpoint :: Assertion
-testEndpoint = do
-  _ <- newEndpoint []
-  return ()

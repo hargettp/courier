@@ -31,7 +31,7 @@ tests = [
 testEndpointTransport :: Assertion
 testEndpointTransport = do
   transport <- newMemoryTransport
-  _ <- newEndpoint [transport]
+  _ <- newEndpoint transport
   return ()
 
 testEndpointBind :: Assertion
@@ -39,7 +39,7 @@ testEndpointBind = do
   let name1 = "endpoint1"
   transport <- newMemoryTransport
   finally (do
-          endpoint <- newEndpoint [transport]
+          endpoint <- newEndpoint transport
           Right () <- bindEndpoint endpoint name1
           return ())
       (shutdown transport)
@@ -49,7 +49,7 @@ testEndpointBindUnbind = do
   let name1 = "endpoint1"
   transport <- newMemoryTransport
   finally (do
-          endpoint <- newEndpoint [transport]
+          endpoint <- newEndpoint transport
           Right () <- bindEndpoint endpoint name1
           unbound <- unbindEndpoint endpoint name1
           case unbound of
@@ -64,8 +64,8 @@ testEndpointSendReceive = do
       name2 = "endpoint2"
   transport <- newMemoryTransport
   finally (do
-          endpoint1 <- newEndpoint [transport]
-          endpoint2 <- newEndpoint [transport]
+          endpoint1 <- newEndpoint transport
+          endpoint2 <- newEndpoint transport
           Right () <- bindEndpoint endpoint1 name1
           Right () <- bindEndpoint endpoint2 name2
           _ <- sendMessage endpoint1 name2 $ encode "hello!"

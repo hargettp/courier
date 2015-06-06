@@ -23,23 +23,38 @@ module Network.Transport.Sockets.Connections (
 
     SocketRef(..),
     SocketVar,
-    newSocketVar
+    newSocketVar,
+
+    receiveSocketMessages,
+    receiveSocketMessage,
+    receiveSocketBytes
+    
 ) where
 
 -- local imports
 
 import Network.Endpoints
+import Network.Transport.Internal
 
 -- external imports
 
 import Control.Concurrent.STM
+import Control.Exception
 
 import qualified Data.ByteString as B
 
+import Data.Serialize
+
 import Network.Socket hiding (bind, recv, sendTo,shutdown, socket)
+import qualified Network.Socket.ByteString  as NSB
+
+import System.Log.Logger
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
+_log :: String
+_log = "transport.sockets.connections"
+
 
 {-|
 A connection specializes the use of a transport for a particular
@@ -131,3 +146,49 @@ data SocketState = SocketState {
     socketStateVersion :: Integer,
     socketStateSocket  :: Maybe Socket
     } deriving (Eq,Show)
+
+receiveSocketMessages :: SocketRef -> TVar Bool -> Address -> Mailbox Message -> IO ()
+receiveSocketMessages sock done addr mailbox = do
+    catchExceptions (do
+          infoM _log $ "Waiting to receive on " ++ (show addr)
+          maybeMsg <- receiveSocketMessage $ socketRefSocket sock
+          infoM _log $ "Received message on " ++ (show addr)
+          case maybeMsg of
+            Nothing -> do
+              sClose $ socketRefSocket sock
+              return ()
+            Just msg -> do
+              atomically $ writeMailbox mailbox msg
+          isDone <- atomically $ readTVar done
+          if isDone
+            then return ()
+            else receiveSocketMessages sock done addr mailbox)
+          (\e -> do
+              isDone <- atomically $ readTVar done
+              if isDone
+                then return ()
+                -- Dropping this message to info, as even well-behaved applications
+                -- may generate it...even though it is benign
+                else infoM _log $ "Receive error: " ++ (show (e :: SomeException)))
+
+receiveSocketMessage :: Socket -> IO (Maybe B.ByteString)
+receiveSocketMessage socket = do
+  maybeLen <- receiveSocketBytes socket 8 -- TODO must figure out what defines length of an integer in bytes
+  case maybeLen of
+    Nothing -> do
+      infoM _log $ "No length received"
+      return Nothing
+    Just len -> do
+      maybeMsg <- receiveSocketBytes socket $ msgLength (decode len)
+      infoM _log $ "Received message"
+      return maybeMsg
+  where
+    msgLength (Right size) = size
+    msgLength (Left err) = error err
+
+receiveSocketBytes :: Socket -> Int -> IO (Maybe B.ByteString)
+receiveSocketBytes sock maxBytes = do
+    bs <- NSB.recv sock maxBytes
+    if B.null bs
+        then return Nothing
+        else return $ Just bs
