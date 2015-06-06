@@ -56,8 +56,8 @@ tests = [
 
 testOneHearCall :: Assertion
 testOneHearCall = do
-    let name1 = "endpoint1"
-        name2 = "endpoint2"
+    let name1 = Name "endpoint1"
+        name2 = Name "endpoint2"
     transport <- newMemoryTransport
     endpoint1 <- newEndpoint transport
     endpoint2 <- newEndpoint transport
@@ -74,8 +74,8 @@ testOneHearCall = do
 
 testOneCallHear :: Assertion
 testOneCallHear = do
-    let name1 = "endpoint1"
-        name2 = "endpoint2"
+    let name1 = Name "endpoint1"
+        name2 = Name "endpoint2"
     transport <- newMemoryTransport
     endpoint1 <- newEndpoint transport
     endpoint2 <- newEndpoint transport
@@ -93,8 +93,8 @@ testOneCallHear = do
 
 testConcurrentCallHear :: Assertion
 testConcurrentCallHear = do
-    let name1 = "endpoint1"
-        name2 = "endpoint2"
+    let name1 = Name "endpoint1"
+        name2 = Name "endpoint2"
     transport <- newMemoryTransport
     endpoint1 <- newEndpoint transport
     endpoint2 <- newEndpoint transport
@@ -122,8 +122,8 @@ testConcurrentCallHear = do
 
 testOneHandler :: Assertion
 testOneHandler = do
-    let name1 = "endpoint1"
-        name2 = "endpoint2"
+    let name1 = Name "endpoint1"
+        name2 = Name "endpoint2"
     transport <- newMemoryTransport
     endpoint1 <- newEndpoint transport
     endpoint2 <- newEndpoint transport
@@ -140,8 +140,8 @@ testOneHandler = do
 
 testTwoHandlers :: Assertion
 testTwoHandlers = do
-    let name1 = "endpoint1"
-        name2 = "endpoint2"
+    let name1 = Name "endpoint1"
+        name2 = Name "endpoint2"
     transport <- newMemoryTransport
     endpoint1 <- newEndpoint transport
     endpoint2 <- newEndpoint transport
@@ -165,10 +165,10 @@ testTwoHandlers = do
 
 testGroupCall :: Assertion
 testGroupCall = do
-    let name1 = "endpoint1"
-        name2 = "endpoint2"
-        name3 = "endpoint3"
-        name4 = "endpoint4"
+    let name1 = Name "endpoint1"
+        name2 = Name "endpoint2"
+        name3 = Name "endpoint3"
+        name4 = Name "endpoint4"
     transport <- newMemoryTransport
     endpoint1 <- newEndpoint transport
     endpoint2 <- newEndpoint transport
@@ -196,10 +196,10 @@ testGroupCall = do
 
 testAnyCall :: Assertion
 testAnyCall = do
-    let name1 = "endpoint1"
-        name2 = "endpoint2"
-        name3 = "endpoint3"
-        name4 = "endpoint4"
+    let name1 = Name "endpoint1"
+        name2 = Name "endpoint2"
+        name3 = Name "endpoint3"
+        name4 = Name "endpoint4"
     transport <- newMemoryTransport
     endpoint1 <- newEndpoint transport
     endpoint2 <- newEndpoint transport
@@ -225,8 +225,8 @@ testAnyCall = do
 
 testOneHandlerWithTimeout :: Assertion
 testOneHandlerWithTimeout = do
-    let name1 = "endpoint1"
-        name2 = "endpoint2"
+    let name1 = Name "endpoint1"
+        name2 = Name "endpoint2"
         longer = 500 * 1000 -- half a second
         shorter = 250 * 1000 -- quarter second
     transport <- newMemoryTransport
@@ -256,10 +256,10 @@ testOneHandlerWithTimeout = do
 
 testGroupCallWithTimeout :: Assertion
 testGroupCallWithTimeout = do
-    let name1 = "endpoint1"
-        name2 = "endpoint2"
-        name3 = "endpoint3"
-        name4 = "endpoint4"
+    let name1 = Name "endpoint1"
+        name2 = Name "endpoint2"
+        name3 = Name "endpoint3"
+        name4 = Name "endpoint4"
         longest = 750 * 1000 -- three quarters of a second
         longer = 500 * 1000 -- half a second
         shorter = 250 * 1000 -- quarter second

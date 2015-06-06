@@ -33,7 +33,7 @@ module Network.Transport (
   Binding(..),
   Envelope(..),
   Message,
-  Name,
+  Name(..),
   Resolver,
   resolve,
   resolverFromList,
@@ -66,10 +66,12 @@ Name for uniquely identifying an 'Endpoint'; suitable for identifying
 the target destination for a 'Message'.
 
 -}
-type Name = String
+newtype Name = Name String deriving (Eq,Ord,Show,Generic)
+
+instance Serialize Name
 
 {-|
-An 'Envelope' is a container for a 'Message' with the 'Address' of the 'Message''s destination.
+An 'Envelope' is a container for a 'Message' with the 'Name' of the 'Message''s destination.
 
 -}
 data Envelope = Envelope {
@@ -80,20 +82,7 @@ data Envelope = Envelope {
 instance Serialize Envelope
 
 {-|
-A 'Mailbox' is a place where transports can put messages for 'Network.Endpoint.Endpoint's
-to receive.  Typically 'Network.Endpoint.Endpoint's will use the same 'Mailbox' when
-binding or connecting with a 'Transport'.
--}
-
-{-|
-An address is a logical identifier suitable for establishing a connection to
-another 'Endpoint' over a 'Transport'. It's use (if at all) is specific to the 'Transport'
-in question.
--}
-type Address = String
-
-{-|
-Bindings are a site for receiving messages on a particular 'Address'
+Bindings are a site for receiving messages on a particular 'Name'
 through a 'Transport'.
 -}
 data Binding = Binding {
@@ -110,6 +99,13 @@ data Transport = Transport {
   sendTo :: Name -> Message -> IO (),
   shutdown :: IO ()
   }
+
+{-|
+An address is a logical identifier suitable for establishing a connection to
+another 'Endpoint' over a 'Transport'. It's use (if at all) is specific to the 'Transport'
+in question.
+-}
+type Address = String
 
 {-|
 A 'Resolver' translates a name into an 'Address', if possible. 

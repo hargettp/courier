@@ -53,8 +53,8 @@ tests =
 
 testEndpointTransport :: (Resolver -> IO Transport) -> Assertion
 testEndpointTransport transportFactory = do
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
+  let name1 = Name "endpoint1"
+      name2 = Name "endpoint2"
   address1 <- newTCPAddress
   address2 <- newTCPAddress
   let resolver = resolverFromList [(name1,address1),

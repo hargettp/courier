@@ -13,8 +13,8 @@ import Data.Serialize
 
 main :: IO ()
 main = do
-    let name1 = "endpoint1"
-        name2 = "endpoint2"
+    let name1 = Name "endpoint1"
+        name2 = Name "endpoint2"
         resolver = resolverFromList [(name1,"localhost:2000"),
                                 (name2,"localhost:2001")]
     transport <- newTCPTransport resolver

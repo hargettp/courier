@@ -36,7 +36,7 @@ testEndpointTransport = do
 
 testEndpointBind :: Assertion
 testEndpointBind = do
-  let name1 = "endpoint1"
+  let name1 = Name "endpoint1"
   transport <- newMemoryTransport
   finally (do
           endpoint <- newEndpoint transport
@@ -46,7 +46,7 @@ testEndpointBind = do
 
 testEndpointBindUnbind :: Assertion
 testEndpointBindUnbind = do
-  let name1 = "endpoint1"
+  let name1 = Name "endpoint1"
   transport <- newMemoryTransport
   finally (do
           endpoint <- newEndpoint transport
@@ -60,8 +60,8 @@ testEndpointBindUnbind = do
 
 testEndpointSendReceive :: Assertion
 testEndpointSendReceive = do
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
+  let name1 = Name "endpoint1"
+      name2 = Name "endpoint2"
   transport <- newMemoryTransport
   finally (do
           endpoint1 <- newEndpoint transport

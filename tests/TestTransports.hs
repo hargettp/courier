@@ -33,6 +33,8 @@ import System.Log.Logger
 
 import Test.HUnit
 
+import Text.Printf
+
 -----------------------------------------------------------------------------
 -----------------------------------------------------------------------------
 
@@ -62,8 +64,8 @@ endpointTransport :: String -> (Resolver -> IO Transport) -> IO Address -> Asser
 endpointTransport _log newTransport newAddress = do
   address1 <- newAddress
   address2 <- newAddress
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
+  let name1 = Name "endpoint1"
+      name2 = Name "endpoint2"
   let resolver = resolverFromList [(name1,address1),
                                (name2,address2)]
   bracket (newTransport resolver)
@@ -77,8 +79,8 @@ endpointBindUnbind _log newTransport newAddress = do
   infoM _log "Starting bind-unbind test"
   address1 <- newAddress
   address2 <- newAddress
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
+  let name1 = Name "endpoint1"
+      name2 = Name "endpoint2"
   let resolver = resolverFromList [(name1,address1),
                                (name2,address2)]
   bracket (newTransport resolver)
@@ -97,8 +99,8 @@ endpointSendReceive _log newTransport newAddress = do
   infoM _log "Starting send-receive test"
   address1 <- newAddress
   address2 <- newAddress
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
+  let name1 = Name "endpoint1"
+      name2 = Name "endpoint2"
   let resolver = resolverFromList [(name1,address1),
                                (name2,address2)]
   bracketTest _log resolver newTransport $ \transport1 transport2 -> do 
@@ -120,9 +122,9 @@ endpointDoubleSendReceive _log newTransport newAddress = do
   infoM _log "Starting double-send-receive test"
   address1 <- newAddress
   address2 <- newAddress
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
-      name3 = "endpoint3"
+  let name1 = Name "endpoint1"
+      name2 = Name "endpoint2"
+      name3 = Name "endpoint3"
   let resolver = resolverFromList [(name1,address1),
                                (name2,address2),
                                (name3,address1)]
@@ -152,8 +154,8 @@ endpointMultipleServerSendReceiveReply _log newTransport newAddress = do
   infoM _log "Starting send-receive-reply test"
   address1 <- newAddress
   address2 <- newAddress
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
+  let name1 = Name "endpoint1"
+      name2 = Name "endpoint2"
   let resolver = resolverFromList [(name1,address1),
                                    (name2,address2)]
   bracket 
@@ -216,8 +218,8 @@ endpointSendReceiveReply _log newTransport newAddress = do
   infoM _log "Starting send-receive-reply test"
   address1 <- newAddress
   address2 <- newAddress
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
+  let name1 = Name "endpoint1"
+      name2 = Name "endpoint2"
   let resolver = resolverFromList [(name1,address1),
                                    (name2,address2)]
   bracketTest _log resolver newTransport $ \transport1 transport2 -> do 
@@ -240,8 +242,8 @@ endpointLocalSendReceiveReply :: String -> (Resolver -> IO Transport) -> IO Addr
 endpointLocalSendReceiveReply _log newTransport newAddress = do
   infoM _log "Starting local-send-receive-reply test"
   address1 <- newAddress
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
+  let name1 = Name "endpoint1"
+      name2 = Name "endpoint2"
   let resolver = resolverFromList [(name1,address1),
                                    (name2,address1)]
   bracket (newTransport resolver)
@@ -267,8 +269,8 @@ endpointMultipleSendReceiveReply _log newTransport newAddress = do
   infoM _log "Starting multiple-send-receive-reply test"
   address1 <- newAddress
   address2 <- newAddress
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
+  let name1 = Name "endpoint1"
+      name2 = Name "endpoint2"
   let resolver = resolverFromList [(name1,address1),
                                    (name2,address2)]
   bracketTest _log resolver newTransport $ \transport1 transport2 -> do
@@ -309,7 +311,7 @@ bracketTest _log resolver newTransport blk = do
 
 verifiedSend :: String -> Endpoint -> Endpoint -> Name -> Name -> String -> Assertion
 verifiedSend _log endpoint1 endpoint2 name1 name2 msg = do
-  infoM _log $ "Sending message from " ++ name1 ++ " to " ++ name2
+  infoM _log $ printf "Sending message from %s to %s " (show name1) (show name2)
   sendMessage_ endpoint1 name2 $ encode msg
   maybeMsg <- receiveMessageTimeout endpoint2 testDelay
   case maybeMsg of

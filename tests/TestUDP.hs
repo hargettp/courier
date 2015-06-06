@@ -46,8 +46,8 @@ tests =
 
 testEndpointTransport :: Assertion
 testEndpointTransport = do
-  let name1 = "endpoint1"
-      name2 = "endpoint2"
+  let name1 = Name "endpoint1"
+      name2 = Name "endpoint2"
   address1 <- newUDPAddress
   address2 <- newUDPAddress
   let resolver = resolverFromList [(name1,address1),
