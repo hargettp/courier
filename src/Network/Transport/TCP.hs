@@ -58,9 +58,6 @@ import System.Log.Logger
 _log :: String
 _log = "transport.tcp"
 
-tcpScheme :: Scheme
-tcpScheme = "tcp"
-
 lookupTCPAddress :: Address -> NS.Family -> IO NS.SockAddr
 lookupTCPAddress address family = lookupAddress family NS.Stream address
 
@@ -74,7 +71,7 @@ different instances will still be able to communicate, provided they use
 correct TCP/IP addresses (or hostnames) for communication.
 -}
 newTCPTransport :: Resolver -> IO Transport
-newTCPTransport resolver = let family = NS.AF_INET in newSocketTransport resolver tcpScheme (tcpBind family) (newTCPConnection family) newTCPMessenger
+newTCPTransport resolver = let family = NS.AF_INET in newSocketTransport resolver (tcpBind family) (newTCPConnection family) newTCPMessenger
 
 {-|
 Create a new 'Transport' suitable for sending messages over TCP/IP (IPv4).  There can
@@ -83,7 +80,7 @@ different instances will still be able to communicate, provided they use
 correct TCP/IP addresses (or hostnames) for communication.
 -}
 newTCPTransport6 :: Resolver -> IO Transport
-newTCPTransport6 resolver = let family = NS.AF_INET6 in newSocketTransport resolver tcpScheme (tcpBind family) (newTCPConnection family) newTCPMessenger
+newTCPTransport6 resolver = let family = NS.AF_INET6 in newSocketTransport resolver (tcpBind family) (newTCPConnection family) newTCPMessenger
 
 tcpBind :: NS.Family -> SocketTransport -> SocketBindings -> Mailbox Message -> Name -> IO (Either String Binding)
 tcpBind family transport sockets inc name = do

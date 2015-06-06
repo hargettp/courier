@@ -92,8 +92,8 @@ type SocketConnectionFactory = Address -> IO Connection
 type SocketMessengerFactory = Bindings -> Resolver -> Connection -> Mailbox Message -> IO Messenger
 type SocketBindingFactory = SocketTransport -> SocketBindings -> Mailbox Message -> Name -> IO (Either String Binding)
 
-newSocketTransport :: Resolver -> Scheme -> SocketBindingFactory -> SocketConnectionFactory -> SocketMessengerFactory -> IO Transport
-newSocketTransport resolver socketScheme binder connectionFactory messengerFactory = do
+newSocketTransport :: Resolver -> SocketBindingFactory -> SocketConnectionFactory -> SocketMessengerFactory -> IO Transport
+newSocketTransport resolver binder connectionFactory messengerFactory = do
   messengers <- atomically $ newTVar M.empty
   bindings <- atomically $ newTVar M.empty
   sockets <- newSocketBindings
@@ -109,8 +109,6 @@ newSocketTransport resolver socketScheme binder connectionFactory messengerFacto
         socketResolver = resolver
         }
   return Transport {
-      scheme = socketScheme,
-      handles = socketTransportHandles transport,
       bind = binder transport sockets,
       sendTo = socketSendTo transport,
       shutdown = socketTransportShutdown transport sockets
@@ -123,14 +121,6 @@ data SocketBinding = SocketBinding {
     socketSocket   :: TMVar Socket,
     socketListener :: TMVar (Async ())
 }
-
-socketTransportHandles :: SocketTransport -> Name -> IO Bool
-socketTransportHandles transport name = do
-  resolved <- resolve (socketResolver transport) name
-  return $ isJust resolved
-  where
-    isJust (Just _) = True
-    isJust _ = False
 
 type SocketBindings = TVar (M.Map Address SocketBinding)
 

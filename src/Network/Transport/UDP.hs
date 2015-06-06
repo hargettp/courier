@@ -62,9 +62,6 @@ import System.Log.Logger
 _log :: String
 _log = "transport.udp"
 
-udpScheme :: Scheme
-udpScheme = "udp"
-
 lookupUDPAddress :: Address -> NS.Family -> IO NS.SockAddr
 lookupUDPAddress address family = lookupAddress family NS.Datagram address
 
@@ -72,10 +69,10 @@ lookupWildcardUDPAddress :: Address -> NS.Family -> IO NS.SockAddr
 lookupWildcardUDPAddress address family = lookupWildcardAddress family NS.Datagram address
 
 newUDPTransport :: Resolver -> IO Transport
-newUDPTransport resolver = newSocketTransport resolver udpScheme (udpBind NS.AF_INET) (newUDPConnection NS.AF_INET) newUDPMessenger
+newUDPTransport resolver = newSocketTransport resolver (udpBind NS.AF_INET) (newUDPConnection NS.AF_INET) newUDPMessenger
 
 newUDPTransport6 :: Resolver -> IO Transport
-newUDPTransport6 resolver = newSocketTransport resolver udpScheme (udpBind NS.AF_INET6) (newUDPConnection NS.AF_INET6) newUDPMessenger
+newUDPTransport6 resolver = newSocketTransport resolver (udpBind NS.AF_INET6) (newUDPConnection NS.AF_INET6) newUDPMessenger
 
 udpBind :: NS.Family -> SocketTransport -> SocketBindings -> Mailbox Message -> Name -> IO (Either String Binding)
 udpBind family transport sockets inc name = do

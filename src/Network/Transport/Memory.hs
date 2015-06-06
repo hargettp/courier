@@ -34,13 +34,10 @@ import qualified Data.Map as M
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-memoryScheme :: Scheme
-memoryScheme = "mem"
-
 data MemoryTransport = MemoryTransport {
   boundMailboxes :: TVar (M.Map Name (Mailbox Message))
   }
-                       
+  
 {-|
 Create a new memory 'Transport' for use by 'Network.Endpoint.Endpoint's.
 -}
@@ -51,8 +48,6 @@ newMemoryTransport = do
         boundMailboxes = bindings
         }
   return Transport {
-      scheme = memoryScheme,
-      handles = memoryHandles transport,
       bind = memoryBind transport,
       sendTo = memorySendTo transport,
       shutdown = return ()
@@ -66,10 +61,6 @@ memoryBind transport mailbox name = do
     bindingName = name,
     unbind = memoryUnbind transport name
     }
-                                       
-memoryHandles :: MemoryTransport -> Name -> IO Bool
--- memoryHandles transport name = True
-memoryHandles _ _ = return True
 
 memorySendTo :: MemoryTransport -> Name -> Message -> IO ()
 memorySendTo transport name msg = do

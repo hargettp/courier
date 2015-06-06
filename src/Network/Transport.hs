@@ -37,7 +37,6 @@ module Network.Transport (
   Resolver,
   resolve,
   resolverFromList,
-  Scheme,
   Transport(..),
 
   module Control.Concurrent.Mailbox
@@ -94,11 +93,6 @@ in question.
 type Address = String
 
 {-|
-A scheme is an identifier for a discrete type of transport.
--}
-type Scheme = String
-
-{-|
 Bindings are a site for receiving messages on a particular 'Address'
 through a 'Transport'.
 -}
@@ -112,8 +106,6 @@ A 'Transport' defines a specific method for establishing connections
 between 'Endpoint's.
 -}
 data Transport = Transport {
-  scheme :: String,
-  handles :: Name -> IO Bool,
   bind :: Mailbox Message -> Name -> IO (Either String Binding),
   sendTo :: Name -> Message -> IO (),
   shutdown :: IO ()
