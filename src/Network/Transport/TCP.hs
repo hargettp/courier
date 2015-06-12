@@ -127,7 +127,6 @@ tcpDispatch transport family address client socketAddress = do
         Just (IdentifyMessage clientAddress) -> do
             infoM _log $ "Identified " ++ (show clientAddress)
             newConn <- (newTCPConnection family) clientAddress
-            -- atomically $ putTMVar (connSocket newConn) $ SocketRef 0 client
             setConnectedSocket (connSocket newConn) client
             msngr <- newMessenger newConn (socketInbound transport)
             replaceMessenger transport clientAddress msngr
@@ -161,27 +160,12 @@ newTCPConnection family address = do
             sockAddr <- lookupTCPAddress address family
             NS.connect socket sockAddr
             infoM _log $ "Initiated socket connection to " ++ (show sockAddr)
-            -- NS.connect socket $ NS.addrAddress $ head ipv4Addrs
-            -- atomically $ putTMVar sock $ SocketRef 0 socket
-            -- setConnectedSocket var socket
-            -- infoM _log $ "Initiated socket connection to " ++ (show $ head ipv4Addrs)
             return socket,
         connSend = tcpSend address,
         connReceive = receiveSocketBytes,
         connClose = do
             infoM _log $ "Closing connection to " ++ address
             forceCloseConnectedSocket var
-            {-
-            state <- atomically $ tryTakeTMVar var
-            case socketStateSocket state of
-                Just socket -> do
-                    infoM _log $ "Closing socket " ++ (show $ socketRefSocket socket) ++ " for " ++ address
-                    NS.sClose $ socketRefSocket socket
-                    infoM _log $ "Closed socket " ++ (show $ socketRefSocket socket) ++ " for " ++ address
-                Nothing -> do
-                    infoM _log $ "No socket to close for " ++ address
-                    return ()
-            -}
             infoM _log $ "Connection to " ++ address ++ " closed"
         }
 
