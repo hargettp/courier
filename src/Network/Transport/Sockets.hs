@@ -74,7 +74,6 @@ import Control.Exception
 import qualified Data.ByteString as B
 import qualified Data.Map as M
 import Data.Serialize
-import qualified Data.Set as S
 
 import GHC.Generics
 
@@ -98,14 +97,14 @@ newSocketTransport resolver binder connectionFactory messengerFactory = do
   bindings <- atomically $ newTVar M.empty
   sockets <- newSocketBindings
   inbound <- atomically $ newMailbox
-  dispatch <- async $ dispatcher bindings inbound
+  dispatch <- async $ dispatcher inbound bindings 
   let transport = SocketTransport {
         socketMessengers = messengers,
         socketBindings = bindings,
         socketConnection = connectionFactory,
         socketMessenger = messengerFactory bindings resolver,
         socketInbound = inbound,
-        socketDispatchers = S.fromList [dispatch],
+        socketDispatcher = dispatch,
         socketResolver = resolver
         }
   return Transport {
@@ -193,7 +192,7 @@ data SocketTransport = SocketTransport {
   socketConnection  :: Address -> IO Connection,
   socketMessenger   :: Connection -> Mailbox Message -> IO Messenger,
   socketInbound     :: Mailbox Message,
-  socketDispatchers :: S.Set (Async ()),
+  socketDispatcher  :: Async (),
   socketResolver    :: Resolver
 }
 
@@ -226,8 +225,8 @@ replaceMessenger transport address msngr = do
 deliver :: Messenger -> Message -> IO ()
 deliver msngr message = atomically $ writeMailbox (messengerOut msngr) message
 
-dispatcher :: TVar (M.Map Name (Mailbox Message)) -> Mailbox Message -> IO ()
-dispatcher bindings mbox = dispatchMessages
+dispatcher :: Mailbox Message -> Bindings -> IO ()
+dispatcher mbox bindings = dispatchMessages
   where
     dispatchMessages = catchExceptions (do
                                  infoM _log $ "Dispatching messages"
@@ -303,5 +302,5 @@ socketTransportShutdown transport sockets = do
   msngrs <- atomically $ readTVar $ socketMessengers transport
   mapM_ closeMessenger $ M.elems msngrs
   infoM _log $ "Closing dispatcher"
-  mapM_ cancel $ S.toList $ socketDispatchers transport
-  mapM_ wait $ S.toList $ socketDispatchers transport
+  cancel $ socketDispatcher transport
+  wait $ socketDispatcher transport
