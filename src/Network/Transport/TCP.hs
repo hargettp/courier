@@ -185,7 +185,7 @@ tcpIdentifySender bindings resolver msngr = do
         identify maybeUniqueAddress= do
             case maybeUniqueAddress of
                 Nothing -> return()
-                Just uniqueAddress -> deliver msngr $ encode $ IdentifyMessage uniqueAddress
+                Just uniqueAddress -> ship msngr $ encode $ IdentifyMessage uniqueAddress
 
 tcpSend :: Address -> NS.Socket -> B.ByteString -> IO ()
 tcpSend addr sock bs = do

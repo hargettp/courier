@@ -48,7 +48,7 @@ module Network.Transport.Sockets (
     newMessenger,
     addMessenger,
     replaceMessenger,
-    deliver,
+    ship,
     closeMessenger,
 
     dispatcher,
@@ -222,8 +222,11 @@ replaceMessenger transport address msngr = do
         Nothing -> do
             addMessenger transport address msngr
 
-deliver :: Messenger -> Message -> IO ()
-deliver msngr message = atomically $ writeMailbox (messengerOut msngr) message
+{-
+Enqueue a message for transmission and delivery via a messenger.
+-}
+ship :: Messenger -> Message -> IO ()
+ship msngr message = atomically $ writeMailbox (messengerOut msngr) message
 
 dispatcher :: Mailbox Message -> Bindings -> IO ()
 dispatcher mbox bindings = dispatchMessages
@@ -243,14 +246,18 @@ dispatcher mbox bindings = dispatchMessages
           errorM _log $ "Error decoding message for dispatch: " ++ err
           return ()
         Right (Envelope destination msg) -> do
-          atomically $ do
-            dests <- readTVar bindings
-            let maybeDest = M.lookup destination dests
-            case maybeDest of
-              Nothing -> return ()
-              Just dest -> do
-                writeMailbox dest msg
-                return ()
+            _ <- deliver bindings destination msg
+            return ()
+
+deliver :: Bindings -> Name -> Message -> IO Bool
+deliver bindings destination msg = atomically $ do
+    dests <- readTVar bindings
+    let maybeDest = M.lookup destination dests
+    case maybeDest of
+      Nothing -> return False
+      Just dest -> do
+        writeMailbox dest msg
+        return True
 
 socketSendTo :: SocketTransport -> Name -> Message -> IO ()
 socketSendTo transport name msg = do
@@ -259,15 +266,7 @@ socketSendTo transport name msg = do
     then return ()
     else remote
   where
-    local = do
-      found <- atomically $ do
-        bindings <- readTVar $ socketBindings transport
-        return $ M.lookup name bindings
-      case found of
-        Nothing -> return False
-        Just mbox -> do
-          atomically $ writeMailbox mbox msg
-          return True
+    local = deliver (socketBindings transport) name msg 
     remote = do
       Just address <- resolve (socketResolver transport) name
       let env = encode $ Envelope {
@@ -284,9 +283,9 @@ socketSendTo transport name msg = do
           conn <- (socketConnection transport) address
           msngr <- (socketMessenger transport) conn (socketInbound transport)
           addMessenger transport address msngr
-          deliver msngr env
+          ship msngr env
           return ()
-        Just msngr -> deliver msngr env
+        Just msngr -> ship msngr env
 
 closeBindings :: SocketBindings -> IO ()
 closeBindings sockets = do
