@@ -1,11 +1,13 @@
+{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Network.Endpoints
 -- Copyright   :  (c) Phil Hargett 2013
 -- License     :  MIT (see LICENSE file)
--- 
+--
 -- Maintainer  :  phil@haphazardhouse.net
 -- Stability   :  experimental
 -- Portability :  non-portable (requires STM)
@@ -20,23 +22,16 @@
 -----------------------------------------------------------------------------
 
 module Network.Endpoints (
-  
+
   -- * How to use courier in an application
   -- $use
-  
+
   -- * Primary API
-  Endpoint,
+  Endpoint(..),
   newEndpoint,
-  
-  bindEndpoint,
-  bindEndpoint_,
-  unbindEndpoint,
-  unbindEndpoint_,
-  
+
   sendMessage,
-  sendMessage_,
   broadcastMessage,
-  broadcastMessage_,
   receiveMessage,
   receiveMessageTimeout,
   postMessage,
@@ -48,38 +43,48 @@ module Network.Endpoints (
   detectMessageTimeout,
   dispatchMessage,
   dispatchMessageTimeout,
-  
-  -- * Transports
-  {-|
-  Transports define specific implementations of message-passing techniques (e.g.,
-  memory-based, TCP, UDP, HTTP, etc.). Typical use of the 'Endpoint's does not
-  require direct use of 'Transport's, beyond creating specific 'Transport's (such as
-  found in "Network.Transport.Memory" and "Network.Transport.TCP") and adding
-  them to an 'Endpoint'.
-  -}
-  module Network.Transport
-  
+
+  -- * Transport
+Transport(..),
+Binding(..),
+withBinding,
+Connection(..),
+withConnection
+
   ) where
 
 -- local imports
 
-import Network.Transport
+import Network.Transport.Internal
 
 -- external imports
 
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Concurrent.Mailbox
 import Control.Concurrent.STM
 
 import qualified Data.Map as M
 
+import qualified Data.ByteString as B
+import Data.Serialize
+
+import GHC.Generics
+
+import System.Log.Logger
+
+import Text.Printf
+
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
+_log :: String
+_log = "transport.endpoints"
+
 -- $use
--- 
+--
 -- A sample of how to use this library:
--- 
+--
 -- > module HelloWorld (
 -- >     main
 -- > ) where
@@ -116,9 +121,9 @@ import qualified Data.Map as M
 Endpoints are a locus of communication, used for sending and receive messages.
 -}
 data Endpoint = Endpoint {
-  endpointTransport :: TVar Transport,
-  endpointBindings :: TVar (M.Map Name Binding),
-  endpointMailbox :: Mailbox Message
+  endpointTransport :: Transport,
+  endpointInbound :: Mailbox Message,
+  endpointOutbound :: TVar (M.Map Name (Mailbox Message))
   }
 
 {-|
@@ -126,107 +131,100 @@ Create a new 'Endpoint' using the provided transports.
 -}
 newEndpoint :: Transport -> IO Endpoint
 newEndpoint transport = do
-  vTransport <- atomically $ newTVar transport
-  bindings <- atomically $ newTVar M.empty
-  mailbox <- atomically $ newMailbox
+  inbound <- atomically newMailbox
+  outbound <- atomically $ newTVar M.empty
   return Endpoint {
-    endpointTransport = vTransport,
-    endpointBindings = bindings,
-    endpointMailbox = mailbox
+    endpointTransport = transport,
+    endpointInbound = inbound,
+    endpointOutbound = outbound
     }
 
 {-|
-Binding an 'Endpoint' to a 'Name' prepares the 'Endpoint' to receive
-messages sent to the bound name.  Upon success, the result will be @Right ()@, but
-if failed, @Left text-of-error-message@.
+A 'Transport' defines a specific method for establishing connections
+between 'Endpoint's.
 -}
-bindEndpoint :: Endpoint -> Name -> IO (Either String ())
-bindEndpoint endpoint name = do 
-    transport <- atomically $ readTVar $ endpointTransport endpoint
-    eitherBinding <- bind transport (endpointMailbox endpoint) name
-    case eitherBinding of
-        Left err -> return $ Left err
-        Right binding -> do 
-            atomically $ modifyTVar (endpointBindings endpoint)
-                (\bindings -> M.insert name binding bindings)
-            return $ Right ()
+data Transport = Transport {
+  bind :: Endpoint -> Name -> IO (Either String Binding),
+  connect :: Endpoint -> Name -> IO (Either String Connection),
+  shutdown :: IO ()
+  }
 
 {-|
-Invoke 'bindEndpoint', but ignore any returned result (success or failure).
+Bindings are a site for receiving messages on a particular 'Name'
+through a 'Transport'.
 -}
-bindEndpoint_ :: Endpoint -> Name -> IO ()
-bindEndpoint_ endpoint name = do
-    _ <- bindEndpoint endpoint name
-    return ()
+data Binding = Binding {
+  bindingName :: Name,
+  unbind :: IO ()
+  }
 
-{-|
-Unbind an 'Endpoint' from a 'Name', after which the 'Endpoint' will eventually not 
-receive messages sent to that 'Name'. Note that there is no guarantee that after 'Unbind'
-succeeds that additional messages to that 'Name' will not be delivered: the only guarantee
-is that eventually messages will no longer be delivered.
-Upon success, the result will be @Right ()@ but
-if failed, @Left text-of-error-message@.
--}
-unbindEndpoint :: Endpoint -> Name -> IO (Either String ())
-unbindEndpoint endpoint name = do
-  bindings <- atomically $ readTVar $ endpointBindings endpoint
-  let maybeBinding = M.lookup name bindings
-  case maybeBinding of
-    Nothing -> return $ Left $ "Endpoint not bound to address: " ++ (show name)
-    Just binding -> do 
+withBinding :: Endpoint -> Name -> IO () -> IO ()
+withBinding endpoint name listener = do
+  let transport = endpointTransport endpoint
+  errorOrBinding <- bind transport endpoint name
+  case errorOrBinding of
+    Left err -> do
+      errorM _log $ printf "Binding on %v encountered error: %v" (show name) err
+      return ()
+    Right binding -> do
+      catchExceptions listener $ \e -> errorM _log $ printf "Binding on %v encountered error: %v" (show name) (show e)
       unbind binding
-      return $ Right ()
+
+{-
+Connections are pathways for sending messages to an 'Endpoint' bound to a specific 'Name'
+-}
+data Connection = Connection {
+  connectionDestination :: Name,
+  disconnect :: IO ()
+}
+
+withConnection :: Endpoint -> Name -> IO () -> IO ()
+withConnection endpoint name communicator = do
+  let transport = endpointTransport endpoint
+  errorOrConnection <- connect transport endpoint name
+  case errorOrConnection of
+    Left err -> do
+      errorM _log $ printf "Connection to %v encountered error: %v" (show name) err
+      return ()
+    Right connection -> do
+      catchExceptions communicator $ \e -> errorM _log $ printf "Connection to %v encountered error: %v" (show name) (show e)
+      disconnect connection
 
 {-|
-Invoke 'unbindEndpoint', but ignore any returned result (success or failure).
+Messages are containers for arbitrary data that may be sent to other 'Network.Endpoints.Endpoint's.
 -}
-unbindEndpoint_ :: Endpoint -> Name -> IO ()
-unbindEndpoint_ endpoint name = do
-    _ <- unbindEndpoint endpoint name
-    return ()
+type Message = B.ByteString
 
 {-|
-Send a 'Message' to specific 'Name' via the indicated 'Endpoint'. While a successful
-response (indicated by returning @Right ()@) indicates that there was no error initiating
-transport of the message, success does not guarantee that an 'Endpoint' received the message.
-Failure initiating transport is indicated by returning @Left text-of-error-message@.
+Name for uniquely identifying an 'Endpoint'; suitable for identifying
+the target destination for a 'Message'.
+
 -}
-sendMessage :: Endpoint -> Name -> Message -> IO (Either String ())
-sendMessage endpoint name msg  = do
-  transport <- atomically $ readTVar $ endpointTransport endpoint
-  sendTo transport name msg
-  return $ Right ()
+newtype Name = Name String deriving (Eq,Ord,Show,Generic)
+
+instance Serialize Name
 
 {-|
-A variant of 'sendMessage' for use when the return value can be ignored.
-
+Send a 'Message' to specific 'Name' via the indicated 'Endpoint'.
 -}
-sendMessage_ :: Endpoint -> Name -> Message -> IO ()
-sendMessage_ endpoint name msg = do
-  _ <- sendMessage endpoint name msg
-  return ()
+sendMessage :: Endpoint -> Name -> Message -> IO ()
+sendMessage endpoint name msg  = atomically $ do
+    outbound <- readTVar $ endpointOutbound endpoint
+    case M.lookup name outbound of
+      Nothing -> return ()
+      Just mailbox -> writeMailbox mailbox msg
 
 {-|
 Helper for sending a single 'Message' to several 'Endpoint's.
 -}
-broadcastMessage :: Endpoint -> [Name] -> Message -> IO [(Either String ())]
-broadcastMessage endpoint names msg = do
-  mapM (\name -> sendMessage endpoint name msg) names
-
-{-|
-Variant of 'broadcastMessage' that ignores the results of sending.
-
--}
-broadcastMessage_ :: Endpoint -> [Name] -> Message -> IO ()
-broadcastMessage_ endpoint names msg = do
-  _ <- broadcastMessage endpoint names msg
-  return ()
+broadcastMessage :: Endpoint -> [Name] -> Message -> IO ()
+broadcastMessage endpoint names msg = mapM_ (\name -> sendMessage endpoint name msg) names
 
 {-|
 Receive the next 'Message' sent to the 'Endpoint', blocking until a message is available.
 -}
 receiveMessage :: Endpoint -> IO Message
-receiveMessage endpoint = atomically $ readMailbox $ endpointMailbox endpoint
+receiveMessage endpoint = atomically $ readMailbox $ endpointInbound endpoint
 
 {-|
 Wait for a message to be received within the timeout, blocking until either a message
@@ -246,8 +244,7 @@ may be useful for applications that prefer to use the 'Endpoint''s 'Mailbox'
 as a general queue of ordered messages.
 -}
 postMessage :: Endpoint -> Message -> IO ()
-postMessage endpoint message = do
-    atomically $ writeMailbox (endpointMailbox endpoint) message
+postMessage endpoint message = atomically $ writeMailbox (endpointInbound endpoint) message
 
 {-|
 Select the next available message in the 'Endpoint' 'Mailbox' matching
@@ -255,9 +252,7 @@ the supplied test function, or blocking until one is available. This function
 differs from 'receiveMessage' in that it supports out of order message reception.
 -}
 selectMessage :: Endpoint -> (Message -> Maybe v) -> IO v
-selectMessage endpoint testFn = do
-    msg <- atomically $ selectMailbox (endpointMailbox endpoint) testFn
-    return msg
+selectMessage endpoint testFn = atomically $ selectMailbox (endpointInbound endpoint) testFn
 
 {-|
 Wait for a message to be selected within the timeout, blocking until either a message
@@ -279,9 +274,7 @@ is left in the mailbox, and thus repeated calls to this function could find the
 message if it is not consumed immediately.
 -}
 detectMessage :: Endpoint -> (Message -> Maybe v) -> IO v
-detectMessage endpoint testFn = do
-    msg <- atomically $ findMailbox (endpointMailbox endpoint) testFn
-    return msg
+detectMessage endpoint testFn = atomically $ findMailbox (endpointInbound endpoint) testFn
 
 {-|
 Find a 'Message' in the 'Endpoint' 'Mailbox' matching the supplied
@@ -304,7 +297,7 @@ and return any result obtained. This function differs from 'receiveMessage'
 in that it supports out of order message reception.
 -}
 dispatchMessage :: Endpoint -> (Message -> Maybe v) -> (v -> IO r) -> IO r
-dispatchMessage endpoint = handleMailbox (endpointMailbox endpoint)
+dispatchMessage endpoint = handleMailbox (endpointInbound endpoint)
 
 dispatchMessageTimeout :: Endpoint -> Int -> (Message -> Maybe v) -> (v -> IO r) -> IO (Maybe r)
 dispatchMessageTimeout endpoint delay testFn handleFn = do
