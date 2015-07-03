@@ -110,7 +110,7 @@ data Request = Request {
     requestMethod :: Method,
     requestArgs :: Message
 } deriving (Eq,Show)
- 
+
 instance Serialize Request where
     put req = do
         put Req
@@ -168,7 +168,7 @@ call :: CallSite -> Name -> Method -> Message -> IO Message
 call (CallSite endpoint from) name method args = do
     rid <- mkRequestId
     let req = Request {requestId = rid,requestCaller = from,requestMethod = method, requestArgs = args}
-    sendMessage_ endpoint name $ encode req
+    sendMessage endpoint name $ encode req
     selectMessage endpoint $ \msg -> do
         case decode msg of
             Left _ -> Nothing
@@ -207,7 +207,7 @@ gcall (CallSite endpoint from) names method args = do
     recvAll req M.empty
     where
         sendAll req = do
-            forM_ names $ \name -> sendMessage_ endpoint name $ encode req
+            forM_ names $ \name -> sendMessage endpoint name $ encode req
         recv req = selectMessage endpoint $ \msg -> do
                 case decode msg of
                     Left _ -> Nothing
@@ -248,7 +248,7 @@ gcallWithTimeout (CallSite endpoint from) names method delay args = do
             return $ complete partialResults
     where
         sendAll req = do
-            forM_ names $ \name -> sendMessage_ endpoint name $ encode req
+            forM_ names $ \name -> sendMessage endpoint name $ encode req
         recv req = selectMessage endpoint $ \msg -> do
                 case decode msg of
                     Left _ -> Nothing
@@ -287,7 +287,7 @@ anyCall (CallSite endpoint from) names method args = do
     recvAny req
     where
         sendAll req = do
-            forM_ names $ \name -> sendMessage_ endpoint name $ encode req
+            forM_ names $ \name -> sendMessage endpoint name $ encode req
         recvAny req = selectMessage endpoint $ \msg -> do
                 case decode msg of
                     Left _ -> Nothing
@@ -332,7 +332,7 @@ hear endpoint name method = do
     return (args, reply caller rid)
     where
         reply caller rid result = do
-            sendMessage_ endpoint caller $ encode $ Response rid name result
+            sendMessage endpoint caller $ encode $ Response rid name result
 
 
 {-|
@@ -348,7 +348,7 @@ hearTimeout endpoint name method timeout = do
         Nothing -> return Nothing
     where
         reply caller rid result = do
-            sendMessage_ endpoint caller $ encode $ Response rid name result
+            sendMessage endpoint caller $ encode $ Response rid name result
 
 {-|
 A 'HandleSite' is a just reference to the actual handler of a specific method.

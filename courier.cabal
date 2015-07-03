@@ -29,9 +29,6 @@ extra-source-files:  changes.md
                      tests/TestMailbox.hs
                      tests/TestMemory.hs
                      tests/TestRPC.hs
-                     tests/TestTCP.hs
-                     tests/TestTransports.hs
-                     tests/TestUDP.hs
                      tests/TestUtils.hs
 
 homepage:          http://github.com/hargettp/courier
@@ -54,20 +51,13 @@ library
 
   exposed-modules:
                   Network.Endpoints
-                  Network.Transport
                   Network.Transport.Memory
-                  Network.Transport.TCP
-                  Network.Transport.UDP
                   Control.Concurrent.Mailbox
                   Network.RPC
 
   ghc-options: -Wall -fno-state-hack
   other-modules:
                   Network.Transport.Internal
-                  Network.Transport.Sockets
-                  Network.Transport.Sockets.Addresses
-                  Network.Transport.Sockets.Connections
-                  Network.Transport.Sockets.Messengers
   build-depends:       base >=4.6 && <5,
                        async,
                        bytestring,

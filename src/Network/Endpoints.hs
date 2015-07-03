@@ -35,6 +35,7 @@ module Network.Endpoints (
   receiveMessage,
   receiveMessageTimeout,
   postMessage,
+  pullMessage,
 
   -- * Selective message reception
   selectMessage,
@@ -44,12 +45,17 @@ module Network.Endpoints (
   dispatchMessage,
   dispatchMessageTimeout,
 
+  -- * Other types
+  Message,
+  Name(..),
+
   -- * Transport
-Transport(..),
-Binding(..),
-withBinding,
-Connection(..),
-withConnection
+  Transport(..),
+  withTransport,
+  Binding(..),
+  withBinding,
+  Connection(..),
+  withConnection
 
   ) where
 
@@ -130,9 +136,9 @@ data Endpoint = Endpoint {
 Create a new 'Endpoint' using the provided transports.
 -}
 newEndpoint :: Transport -> IO Endpoint
-newEndpoint transport = do
-  inbound <- atomically newMailbox
-  outbound <- atomically $ newTVar M.empty
+newEndpoint transport = atomically $ do
+  inbound <- newMailbox
+  outbound <- newTVar M.empty
   return Endpoint {
     endpointTransport = transport,
     endpointInbound = inbound,
@@ -148,6 +154,12 @@ data Transport = Transport {
   connect :: Endpoint -> Name -> IO (Either String Connection),
   shutdown :: IO ()
   }
+
+withTransport :: Transport -> (Endpoint -> IO ()) -> IO ()
+withTransport transport communicator = do
+  endpoint <- newEndpoint transport
+  communicator endpoint
+  shutdown transport
 
 {-|
 Bindings are a site for receiving messages on a particular 'Name'
@@ -210,9 +222,13 @@ Send a 'Message' to specific 'Name' via the indicated 'Endpoint'.
 sendMessage :: Endpoint -> Name -> Message -> IO ()
 sendMessage endpoint name msg  = atomically $ do
     outbound <- readTVar $ endpointOutbound endpoint
-    case M.lookup name outbound of
-      Nothing -> return ()
-      Just mailbox -> writeMailbox mailbox msg
+    mailbox <- case M.lookup name outbound of
+      Nothing -> do
+        mailbox <- newMailbox
+        modifyTVar (endpointOutbound endpoint) $ M.insert name mailbox
+        return mailbox
+      Just mailbox -> return mailbox
+    writeMailbox mailbox msg
 
 {-|
 Helper for sending a single 'Message' to several 'Endpoint's.
@@ -243,8 +259,19 @@ Posts a 'Message' directly to an 'Endpoint', without use of a transport. This
 may be useful for applications that prefer to use the 'Endpoint''s 'Mailbox'
 as a general queue of ordered messages.
 -}
-postMessage :: Endpoint -> Message -> IO ()
-postMessage endpoint message = atomically $ writeMailbox (endpointInbound endpoint) message
+postMessage :: Endpoint -> Message -> STM ()
+postMessage endpoint message = writeMailbox (endpointInbound endpoint) message
+
+{-
+Pull a 'Message' intended for a destination name from an 'Endpoint' directly,
+without the use of a 'Transport'
+-}
+pullMessage :: Endpoint -> Name -> STM Message
+pullMessage endpoint destination = do
+  outbound <- readTVar $ endpointOutbound endpoint
+  case M.lookup destination outbound of
+    Nothing -> retry
+    Just mailbox -> readMailbox mailbox
 
 {-|
 Select the next available message in the 'Endpoint' 'Mailbox' matching

@@ -19,8 +19,6 @@ import Test.Framework
 -- Test modules
 import qualified TestMailbox as MB
 import qualified TestMemory as M
-import qualified TestTCP as T
-import qualified TestUDP as U
 import qualified TestRPC as R
 
 -----------------------------------------------------------------------------
@@ -42,7 +40,4 @@ tests :: [Test.Framework.Test]
 tests =
   MB.tests
   ++ M.tests
-  ++ T.tests
-  ++ U.tests
   ++ R.tests
-
