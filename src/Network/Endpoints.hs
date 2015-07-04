@@ -51,7 +51,7 @@ module Network.Endpoints (
 
   -- * Transport
   Transport(..),
-  withTransport,
+  withEndpoint,
   Binding(..),
   withBinding,
   Connection(..),
@@ -155,8 +155,8 @@ data Transport = Transport {
   shutdown :: IO ()
   }
 
-withTransport :: Transport -> (Endpoint -> IO ()) -> IO ()
-withTransport transport communicator = do
+withEndpoint :: Transport -> (Endpoint -> IO ()) -> IO ()
+withEndpoint transport communicator = do
   endpoint <- newEndpoint transport
   communicator endpoint
   shutdown transport

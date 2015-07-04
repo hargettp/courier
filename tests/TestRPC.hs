@@ -62,8 +62,8 @@ testOneHearCall = do
     let name1 = Name "endpoint1"
         name2 = Name "endpoint2"
     transport <- newMemoryTransport
-    withTransport transport $ \endpoint1 ->
-      withTransport transport $ \endpoint2 ->
+    withEndpoint transport $ \endpoint1 ->
+      withEndpoint transport $ \endpoint2 ->
         withBinding endpoint1 name1 $
           withBinding endpoint2 name2 $ do
             _ <- async $ do
@@ -80,8 +80,8 @@ testOneCallHear = do
   let name1 = Name "endpoint1"
       name2 = Name "endpoint2"
   transport <- newMemoryTransport
-  withTransport transport $ \endpoint1 ->
-    withTransport transport $ \endpoint2 ->
+  withEndpoint transport $ \endpoint1 ->
+    withEndpoint transport $ \endpoint2 ->
       withBinding endpoint1 name1 $
         withBinding endpoint2 name2 $ do
           let cs = newCallSite endpoint1 name1
@@ -99,8 +99,8 @@ testConcurrentCallHear = do
   let name1 = Name "endpoint1"
       name2 = Name "endpoint2"
   transport <- newMemoryTransport
-  withTransport transport $ \endpoint1 ->
-    withTransport transport $ \endpoint2 ->
+  withEndpoint transport $ \endpoint1 ->
+    withEndpoint transport $ \endpoint2 ->
       withBinding endpoint1 name1 $
         withBinding endpoint2 name2 $ do
           let cs1 = newCallSite endpoint1 name1
@@ -128,8 +128,8 @@ testOneHandler = do
   let name1 = Name "endpoint1"
       name2 = Name "endpoint2"
   transport <- newMemoryTransport
-  withTransport transport $ \endpoint1 ->
-    withTransport transport $ \endpoint2 ->
+  withEndpoint transport $ \endpoint1 ->
+    withEndpoint transport $ \endpoint2 ->
       withBinding endpoint1 name1 $
         withBinding endpoint2 name2 $ do
           h <- handle endpoint2 name2 "foo" $ \bytes ->
@@ -146,8 +146,8 @@ testTwoHandlers = do
   let name1 = Name "endpoint1"
       name2 = Name "endpoint2"
   transport <- newMemoryTransport
-  withTransport transport $ \endpoint1 ->
-    withTransport transport $ \endpoint2 ->
+  withEndpoint transport $ \endpoint1 ->
+    withEndpoint transport $ \endpoint2 ->
       withBinding endpoint1 name1 $
         withBinding endpoint2 name2 $ do
         h1 <- handle endpoint2 name2 "foo" $ \bytes ->

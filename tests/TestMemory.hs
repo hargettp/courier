@@ -33,7 +33,7 @@ tests = [
 testEndpointTransport :: Assertion
 testEndpointTransport = do
   transport <- newMemoryTransport
-  withTransport transport $ \_ -> return ()
+  withEndpoint transport $ \_ -> return ()
 
 {-
 testEndpointBind :: Assertion
@@ -65,8 +65,8 @@ testEndpointSendReceive = do
   let name1 = Name "endpoint1"
       name2 = Name "endpoint2"
   transport <- newMemoryTransport
-  withTransport transport $ \endpoint1 ->
-    withTransport transport $ \endpoint2 ->
+  withEndpoint transport $ \endpoint1 ->
+    withEndpoint transport $ \endpoint2 ->
       withBinding endpoint1 name1 $
         withBinding endpoint2 name2 $ do
           sendMessage endpoint1 name2 $ encode "hello!"
