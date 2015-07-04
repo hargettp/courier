@@ -129,8 +129,10 @@ Endpoints are a locus of communication, used for sending and receive messages.
 data Endpoint = Endpoint {
   endpointTransport :: Transport,
   endpointInbound :: Mailbox Message,
-  endpointOutbound :: TVar (M.Map Name (Mailbox Message))
+  endpointOutbound :: Mailboxes
   }
+
+type Mailboxes = TVar (M.Map Name (Mailbox Message))
 
 {-|
 Create a new 'Endpoint' using the provided transports.
