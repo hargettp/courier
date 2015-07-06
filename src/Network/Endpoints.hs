@@ -52,8 +52,14 @@ module Network.Endpoints (
   -- * Transport
   Transport(..),
   withEndpoint,
+  withEndpoint2,
+  withEndpoint3,
+  withEndpoint4,
   Binding(..),
   withBinding,
+  withBinding2,
+  withBinding3,
+  withBinding4,
   Connection(..),
   withConnection
 
@@ -69,6 +75,8 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.Mailbox
 import Control.Concurrent.STM
+
+import Control.Exception
 
 import qualified Data.Map as M
 
@@ -158,10 +166,26 @@ data Transport = Transport {
   }
 
 withEndpoint :: Transport -> (Endpoint -> IO ()) -> IO ()
-withEndpoint transport communicator = do
-  endpoint <- newEndpoint transport
-  communicator endpoint
-  shutdown transport
+withEndpoint transport communicator =
+  finally
+    (newEndpoint transport >>= communicator)
+    (shutdown transport)
+
+withEndpoint2 :: Transport -> (Endpoint -> Endpoint -> IO ()) -> IO ()
+withEndpoint2 transport fn =
+  withEndpoint transport $ \endpoint1 ->
+    withEndpoint transport $ \endpoint2 -> fn endpoint1 endpoint2
+
+withEndpoint3 :: Transport -> (Endpoint -> Endpoint -> Endpoint -> IO () ) -> IO ()
+withEndpoint3 transport fn =
+  withEndpoint transport $ \endpoint1 ->
+    withEndpoint transport $ \endpoint2 ->
+      withEndpoint transport $ \endpoint3 -> fn endpoint1 endpoint2 endpoint3
+
+withEndpoint4 :: Transport -> (Endpoint -> Endpoint -> Endpoint -> Endpoint -> IO () ) -> IO ()
+withEndpoint4 transport fn =
+  withEndpoint2 transport $ \endpoint1 endpoint2 ->
+    withEndpoint2 transport $ \endpoint3 endpoint4 -> fn endpoint1 endpoint2 endpoint3 endpoint4
 
 {-|
 Bindings are a site for receiving messages on a particular 'Name'
@@ -181,8 +205,25 @@ withBinding endpoint name listener = do
       errorM _log $ printf "Binding on %v encountered error: %v" (show name) err
       return ()
     Right binding -> do
-      catchExceptions listener $ \e -> errorM _log $ printf "Binding on %v encountered error: %v" (show name) (show e)
-      unbind binding
+      finally listener $ unbind binding
+
+withBinding2 :: (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
+withBinding2 (endpoint1,name1) (endpoint2,name2) fn =
+  withBinding endpoint1 name1 $
+    withBinding endpoint2 name2 fn
+
+withBinding3 :: (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
+withBinding3 (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) fn =
+  withBinding endpoint1 name1 $
+    withBinding endpoint2 name2 $
+      withBinding endpoint3 name3 fn
+
+withBinding4 :: (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
+withBinding4 (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) (endpoint4,name4) fn =
+  withBinding endpoint1 name1 $
+    withBinding endpoint2 name2 $
+      withBinding endpoint3 name3 $
+        withBinding endpoint4 name4 fn
 
 {-
 Connections are pathways for sending messages to an 'Endpoint' bound to a specific 'Name'
