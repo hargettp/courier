@@ -71,8 +71,6 @@ module Network.Endpoints (
 
 -- local imports
 
-import Network.Transport.Internal
-
 -- external imports
 
 import Control.Concurrent
@@ -140,9 +138,14 @@ _log = "transport.endpoints"
 Endpoints are a locus of communication, used for sending and receive messages.
 -}
 data Endpoint = Endpoint {
+  -- | The 'Transport' used by this 'Endpoint'
   endpointTransport :: Transport,
+  -- | The 'Mailbox' where inbound 'Message's that the 'Endpoint' will receive are queued
   endpointInbound :: Mailbox Message,
+  -- | The 'M.Map' of 'Mailbox'es where 'Message'es intended for other 'Endpoint's are
+  --   queued for the 'Transport' to eventually send
   endpointOutbound :: Mailboxes,
+  -- | The 'Name's to which the 'Endpoint' is bound
   endpointNames :: Names
   }
 

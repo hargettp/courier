@@ -32,32 +32,6 @@ testEndpointTransport = do
   transport <- newMemoryTransport
   withEndpoint transport $ \_ -> return ()
 
-{-
-testEndpointBind :: Assertion
-testEndpointBind = do
-  let name1 = Name "endpoint1"
-  transport <- newMemoryTransport
-  finally (do
-          endpoint <- newEndpoint transport
-          Right () <- bindEndpoint endpoint name1
-          return ())
-      (shutdown transport)
-
-testEndpointBindUnbind :: Assertion
-testEndpointBindUnbind = do
-  let name1 = Name "endpoint1"
-  transport <- newMemoryTransport
-  finally (do
-          endpoint <- newEndpoint transport
-          Right () <- bindEndpoint endpoint name1
-          unbound <- unbindEndpoint endpoint name1
-          case unbound of
-            Left err -> assertFailure $ "Unbind failed: " ++ err
-            Right () -> assertBool "Unbind succeeded" True
-          return ())
-      (shutdown transport)
--}
-
 _log :: String
 _log = "_test_memory"
 
