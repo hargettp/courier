@@ -48,6 +48,7 @@ module Network.Endpoints (
   -- * Other types
   Message,
   Name(..),
+  Names,
 
   -- * Transport
   Transport(..),
@@ -61,7 +62,10 @@ module Network.Endpoints (
   withBinding3,
   withBinding4,
   Connection(..),
-  withConnection
+  withConnection,
+  withConnection2,
+  withConnection3,
+  withConnection4
 
   ) where
 
@@ -82,6 +86,7 @@ import qualified Data.Map as M
 
 import qualified Data.ByteString as B
 import Data.Serialize
+import qualified Data.Set as S
 
 import GHC.Generics
 
@@ -137,7 +142,8 @@ Endpoints are a locus of communication, used for sending and receive messages.
 data Endpoint = Endpoint {
   endpointTransport :: Transport,
   endpointInbound :: Mailbox Message,
-  endpointOutbound :: Mailboxes
+  endpointOutbound :: Mailboxes,
+  endpointNames :: Names
   }
 
 type Mailboxes = TVar (M.Map Name (Mailbox Message))
@@ -149,10 +155,12 @@ newEndpoint :: Transport -> IO Endpoint
 newEndpoint transport = atomically $ do
   inbound <- newMailbox
   outbound <- newTVar M.empty
+  names <- newTVar S.empty
   return Endpoint {
     endpointTransport = transport,
     endpointInbound = inbound,
-    endpointOutbound = outbound
+    endpointOutbound = outbound,
+    endpointNames = names
     }
 
 {-|
@@ -241,9 +249,25 @@ withConnection endpoint name communicator = do
     Left err -> do
       errorM _log $ printf "Connection to %v encountered error: %v" (show name) err
       return ()
-    Right connection -> do
-      catchExceptions communicator $ \e -> errorM _log $ printf "Connection to %v encountered error: %v" (show name) (show e)
-      disconnect connection
+    Right connection -> finally communicator $ disconnect connection
+
+withConnection2 ::Endpoint -> Name -> Name -> IO () -> IO ()
+withConnection2 endpoint name1 name2 communicator =
+  withConnection endpoint name1 $
+    withConnection endpoint name2 communicator
+
+withConnection3 ::Endpoint -> Name -> Name -> Name -> IO () -> IO ()
+withConnection3 endpoint name1 name2 name3 communicator =
+  withConnection endpoint name1 $
+    withConnection endpoint name2 $
+      withConnection endpoint name3 communicator
+
+withConnection4 ::Endpoint -> Name -> Name -> Name -> Name -> IO () -> IO ()
+withConnection4 endpoint name1 name2 name3 name4 communicator = 
+  withConnection endpoint name1 $
+    withConnection endpoint name2 $
+      withConnection endpoint name3 $
+        withConnection endpoint name4 communicator
 
 {-|
 Messages are containers for arbitrary data that may be sent to other 'Network.Endpoints.Endpoint's.
@@ -258,6 +282,8 @@ the target destination for a 'Message'.
 newtype Name = Name String deriving (Eq,Ord,Show,Generic)
 
 instance Serialize Name
+
+type Names = TVar (S.Set Name )
 
 {-|
 Send a 'Message' to specific 'Name' via the indicated 'Endpoint'.
