@@ -29,6 +29,7 @@ import Network.Endpoints
 -- external imports
 
 import Control.Concurrent.STM
+import Control.Exception
 import Control.Monad
 
 import qualified Data.Map as M
@@ -52,18 +53,18 @@ newMemoryTransport = do
       shutdown = return ()
       }
 
-memoryBind :: Bindings -> Endpoint -> Name -> IO (Either String Binding)
+memoryBind :: Bindings -> Endpoint -> Name -> IO Binding
 memoryBind vBindings endpoint name = atomically $ do
   bindings <- readTVar vBindings
   case M.lookup name bindings of
     Nothing -> do
       modifyTVar (endpointNames endpoint) $ S.insert name
       modifyTVar vBindings $ M.insert name endpoint
-      return $ Right Binding {
+      return Binding {
         bindingName = name,
         unbind = memoryUnbind vBindings endpoint name
       }
-    Just _ -> return $ Left "binding exists"
+    Just _ -> throw $ BindingExists name
 
 memoryUnbind :: Bindings -> Endpoint -> Name -> IO ()
 memoryUnbind vBindings endpoint name = atomically $ do
@@ -72,7 +73,7 @@ memoryUnbind vBindings endpoint name = atomically $ do
 
 type Bindings = TVar (M.Map Name Endpoint)
 
-memoryConnect :: Connections -> Bindings -> Endpoint -> Name -> IO (Either String Connection)
+memoryConnect :: Connections -> Bindings -> Endpoint -> Name -> IO Connection
 memoryConnect vConnections vBindings origin name = do
   atomically $ do
     connections <- readTVar vConnections
@@ -80,17 +81,17 @@ memoryConnect vConnections vBindings origin name = do
       Nothing -> do
         bindings <- readTVar vBindings
         case M.lookup name bindings of
-          Nothing -> return $ Left $ printf "no endpoint bound to " (show name)
+          Nothing -> throw $ ConnectionHasNoBoundPeer name
           Just destination -> do
             modifyTVar (endpointOutbound origin) $ M.insert name $ endpointInbound destination
             names <- readTVar $ endpointNames origin
             forM_ (S.elems names) $ \peer -> modifyTVar (endpointOutbound destination) $ M.insert peer $ endpointInbound origin
             modifyTVar vConnections $ M.insert name origin
-            return $ Right Connection {
+            return Connection {
               connectionDestination = name,
               disconnect = memoryDisconnect vConnections origin destination name
             }
-      Just _ -> return $ Left "connection exists"
+      Just _ -> throw $ ConnectionExists name
 
 type Connections = TVar (M.Map Name Endpoint)
 

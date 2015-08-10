@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable     #-}
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -52,16 +53,19 @@ module Network.Endpoints (
 
   -- * Transport
   Transport(..),
+  TransportException(..),
   withEndpoint,
   withEndpoint2,
   withEndpoint3,
   withEndpoint4,
   Binding(..),
+  BindException(..),
   withBinding,
   withBinding2,
   withBinding3,
   withBinding4,
   Connection(..),
+  ConnectException(..),
   withConnection,
   withConnection2,
   withConnection3,
@@ -85,12 +89,9 @@ import qualified Data.Map as M
 import qualified Data.ByteString as B
 import Data.Serialize
 import qualified Data.Set as S
+import Data.Typeable
 
 import GHC.Generics
-
-import System.Log.Logger
-
-import Text.Printf
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -171,10 +172,17 @@ A 'Transport' defines a specific method for establishing connections
 between 'Endpoint's.
 -}
 data Transport = Transport {
-  bind :: Endpoint -> Name -> IO (Either String Binding),
-  connect :: Endpoint -> Name -> IO (Either String Connection),
+  bind :: Endpoint -> Name -> IO Binding,
+  connect :: Endpoint -> Name -> IO Connection,
   shutdown :: IO ()
   }
+
+data TransportException =
+  NoDataRead |
+  DataUnderflow
+  deriving (Show,Typeable)
+
+instance Exception TransportException
 
 withEndpoint :: Transport -> (Endpoint -> IO ()) -> IO ()
 withEndpoint transport communicator =
@@ -207,16 +215,18 @@ data Binding = Binding {
   unbind :: IO ()
   }
 
+data BindException =
+  BindingExists Name |
+  BindingDoesNotExist Name
+  deriving (Show,Typeable)
+
+instance Exception BindException
+
 withBinding :: Endpoint -> Name -> IO () -> IO ()
 withBinding endpoint name listener = do
   let transport = endpointTransport endpoint
-  errorOrBinding <- bind transport endpoint name
-  case errorOrBinding of
-    Left err -> do
-      errorM _log $ printf "Binding on %v encountered error: %v" (show name) err
-      return ()
-    Right binding -> do
-      finally listener $ unbind binding
+  binding <- bind transport endpoint name
+  finally listener $ unbind binding
 
 withBinding2 :: (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
 withBinding2 (endpoint1,name1) (endpoint2,name2) fn =
@@ -244,15 +254,19 @@ data Connection = Connection {
   disconnect :: IO ()
 }
 
+data ConnectException =
+  ConnectionExists Name |
+  ConnectionDoesNotExist Name |
+  ConnectionHasNoBoundPeer Name
+  deriving (Show,Typeable)
+
+instance Exception ConnectException
+
 withConnection :: Endpoint -> Name -> IO () -> IO ()
 withConnection endpoint name communicator = do
   let transport = endpointTransport endpoint
-  errorOrConnection <- connect transport endpoint name
-  case errorOrConnection of
-    Left err -> do
-      errorM _log $ printf "Connection to %v encountered error: %v" (show name) err
-      return ()
-    Right connection -> finally communicator $ disconnect connection
+  connection <- connect transport endpoint name
+  finally communicator $ disconnect connection
 
 withConnection2 ::Endpoint -> Name -> Name -> IO () -> IO ()
 withConnection2 endpoint name1 name2 communicator =
@@ -266,7 +280,7 @@ withConnection3 endpoint name1 name2 name3 communicator =
       withConnection endpoint name3 communicator
 
 withConnection4 ::Endpoint -> Name -> Name -> Name -> Name -> IO () -> IO ()
-withConnection4 endpoint name1 name2 name3 name4 communicator = 
+withConnection4 endpoint name1 name2 name3 name4 communicator =
   withConnection endpoint name1 $
     withConnection endpoint name2 $
       withConnection endpoint name3 $
@@ -332,7 +346,7 @@ may be useful for applications that prefer to use the 'Endpoint''s 'Mailbox'
 as a general queue of ordered messages.
 -}
 postMessage :: Endpoint -> Message -> STM ()
-postMessage endpoint message = writeMailbox (endpointInbound endpoint) message
+postMessage endpoint = writeMailbox (endpointInbound endpoint)
 
 {-
 Pull a 'Message' intended for a destination name from an 'Endpoint' directly,

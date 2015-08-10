@@ -4,17 +4,26 @@ module TestUtils
     , newTCPAddress6
     , newUDPAddress6
     , timeBound
-    , troubleshoot)
+    , troubleshoot
+
+    ,testTransportEndpointSendReceive)
     where
 
 -- local imports
+
+import Network.Endpoints
 
 -- external imports
 import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Exception
+
+import Data.Serialize
+
 import qualified Network.Socket as NS
+
 import System.Log.Logger
+
 import Test.HUnit
 
 --------------------------------------------------------------------------------
@@ -74,3 +83,16 @@ troubleshoot fn = do
     finally (do
         updateGlobalLogger rootLoggerName (setLevel INFO)
         fn) (updateGlobalLogger rootLoggerName (setLevel WARNING))
+
+testTransportEndpointSendReceive :: IO Transport -> Assertion
+testTransportEndpointSendReceive transportFactory = do
+  let name1 = Name "endpoint1"
+      name2 = Name "endpoint2"
+  transport <- transportFactory
+  withEndpoint2 transport $ \endpoint1 endpoint2 -> do
+    withBinding2 (endpoint1,name1) (endpoint2,name2) $ do
+      withConnection endpoint1 name2 $ do
+        sendMessage endpoint1 name2 $ encode "hello!"
+        msg <- receiveMessage endpoint2
+        assertEqual "Received message not same as sent" (Right "hello!") (decode msg)
+        return ()

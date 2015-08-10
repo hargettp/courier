@@ -52,6 +52,8 @@ library
   exposed-modules:
                   Network.Endpoints
                   Network.Transport.Memory
+                  Network.Transport.Sockets
+                  Network.Transport.Sockets.TCP
                   Control.Concurrent.Mailbox
                   Network.RPC
 
