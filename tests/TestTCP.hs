@@ -22,6 +22,8 @@ tests :: [Test.Framework.Test]
 tests = [
     testCase "tcp-endpoints+transport" testEndpointTransport,
     testCase "tcp-sendReceive" testEndpointSendReceive,
+    testCase "tcp-sendReceive-2-serial-clients" testEndpointSendReceive2SerialClients,
+    testCase "tcp-sendReceive-2-serial-servers" testEndpointSendReceive2SerialServers,
     testCase "tcp-transport" testTCPTransport
   ]
 
@@ -35,6 +37,14 @@ _log = "_test_TCP"
 
 testEndpointSendReceive =
   testTransportEndpointSendReceive
+    (newTCPTransport4 tcpSocketResolver4) (Name "localhost:9001") (Name "localhost:9002")
+
+testEndpointSendReceive2SerialClients =
+  testTransportEndpointSendReceive2SerialClients
+    (newTCPTransport4 tcpSocketResolver4) (Name "localhost:9001") (Name "localhost:9002")
+
+testEndpointSendReceive2SerialServers =
+  testTransportEndpointSendReceive2SerialServers
     (newTCPTransport4 tcpSocketResolver4) (Name "localhost:9001") (Name "localhost:9002")
 
 -- TCP tests
