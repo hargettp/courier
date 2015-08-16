@@ -58,7 +58,13 @@ library
                   Control.Concurrent.Mailbox
                   Network.RPC
 
-  ghc-options: -Wall -fno-state-hack
+  ghc-options:
+    -Wall
+    -fno-state-hack
+    -threaded
+    -- -O2
+    -- -fprof-auto
+
   other-modules:
                   Network.Transport.Internal
   build-depends:       base >=4.6 && <5,
@@ -96,4 +102,9 @@ Test-Suite test-courier
         -- this project's modules
         courier
 
-    ghc-options: -Wall -threaded
+    ghc-options:
+      -Wall
+      -threaded
+      -- -O2
+      -- -fprof-auto
+      -- "-with-rtsopts=-N -p -s -h -i0.1"

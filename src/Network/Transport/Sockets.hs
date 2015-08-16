@@ -46,6 +46,14 @@ import Data.Typeable
 
 import qualified Network.Socket as NS
 
+import Data.List
+
+import Debug.Trace
+
+import GHC.Stack
+
+import Text.Printf
+
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -128,31 +136,42 @@ socketConnect sConnect endpoint name = do
 
 connector :: Endpoint -> Name -> Connect -> IO ()
 connector endpoint name transportConnect = loopUntilKilled $ do
+  traceM $ printf "starting connector to %v" (show name)
   connection <- transportConnect endpoint name
-  finally (messenger endpoint connection) $
+  atomically $ putTMVar (connectionDestination connection) name
+  finally (messenger endpoint connection) $ do
     disconnectSocket connection
+    traceM $ printf "stopped connector to %v" (show name)
+
   where
     loopUntilKilled fn =
       catch (catch fn untilKilled)
         (loop fn)
     loop :: IO () -> SomeException -> IO ()
-    loop fn _ = loopUntilKilled fn
+    loop fn e =  do
+      stack <- currentCallStack
+      traceM $ printf "Error %v connecting to %v: \n\t%v" (show e) (show name) (intercalate "\n\t" stack)
+      loopUntilKilled fn
     untilKilled :: AsyncException -> IO ()
     untilKilled _ = return ()
 
 messenger :: Endpoint -> SocketConnection -> IO ()
-messenger endpoint connection =
+messenger endpoint connection = do
   -- counting on race_ to kill reader & writer
   -- if messenger is killed; since it uses withAsync, it should
-  race_ reader writer
+  traceM $ printf "starting messenger"
+  finally (race_ reader writer) $ do
+    traceM $ printf "stopped messenger "
   where
     reader = do
+      traceM $ printf "starting reader"
       msg <- receiveSocketMessage connection
       -- TODO consider a way of using a message to identify the name of
       -- the endpoint on the other end of the connection
       atomically $ postMessage endpoint msg
       reader
     writer = do
+      traceM $ printf "starting writer"
       msg <- atomically $ do
         -- this basically means we wait until we have a name
         name <- readTMVar $ connectionDestination connection

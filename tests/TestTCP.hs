@@ -21,10 +21,6 @@ import Test.Framework.Providers.HUnit
 tests :: [Test.Framework.Test]
 tests = [
     testCase "tcp-endpoints+transport" testEndpointTransport,
-    {-
-    testCase "tcp-bind" testEndpointBind,
-    testCase "tcp-unbind" testEndpointBindUnbind,
-    -}
     testCase "tcp-sendReceive" testEndpointSendReceive,
     testCase "tcp-transport" testTCPTransport
   ]
