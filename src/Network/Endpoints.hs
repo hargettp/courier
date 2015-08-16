@@ -147,10 +147,26 @@ data Endpoint = Endpoint {
   --   queued for the 'Transport' to eventually send
   endpointOutbound :: Mailboxes,
   -- | The 'Name's to which the 'Endpoint' is bound
-  endpointNames :: Names
+  boundEndpointNames :: Names
   }
 
 type Mailboxes = TVar (M.Map Name (Mailbox Message))
+
+{-|
+Messages are containers for arbitrary data that may be sent to other 'Network.Endpoints.Endpoint's.
+-}
+type Message = B.ByteString
+
+{-|
+Name for uniquely identifying an 'Endpoint'; suitable for identifying
+the target destination for a 'Message'.
+
+-}
+newtype Name = Name String deriving (Eq,Ord,Show,Generic)
+
+instance Serialize Name
+
+type Names = TVar (S.Set Name )
 
 {-|
 Create a new 'Endpoint' using the provided transports.
@@ -164,7 +180,7 @@ newEndpoint transport = atomically $ do
     endpointTransport = transport,
     endpointInbound = inbound,
     endpointOutbound = outbound,
-    endpointNames = names
+    boundEndpointNames = names
     }
 
 {-|
@@ -223,10 +239,17 @@ data BindException =
 instance Exception BindException
 
 withBinding :: Endpoint -> Name -> IO () -> IO ()
-withBinding endpoint name listener = do
+withBinding endpoint name actor = do
   let transport = endpointTransport endpoint
+  atomically $ do
+    bindings <- readTVar $ boundEndpointNames endpoint
+    if S.member name bindings
+      then throw $ BindingExists name
+      else modifyTVar (boundEndpointNames endpoint) $ S.insert name
   binding <- bind transport endpoint name
-  finally listener $ unbind binding
+  finally actor $ do
+    unbind binding
+    atomically $ modifyTVar (boundEndpointNames endpoint) $ S.delete name
 
 withBinding2 :: (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
 withBinding2 (endpoint1,name1) (endpoint2,name2) fn =
@@ -250,7 +273,6 @@ withBinding4 (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) (endpoint4,na
 Connections are pathways for sending messages to an 'Endpoint' bound to a specific 'Name'
 -}
 data Connection = Connection {
-  connectionDestination :: Name,
   disconnect :: IO ()
 }
 
@@ -263,10 +285,10 @@ data ConnectException =
 instance Exception ConnectException
 
 withConnection :: Endpoint -> Name -> IO () -> IO ()
-withConnection endpoint name communicator = do
+withConnection endpoint name actor = do
   let transport = endpointTransport endpoint
   connection <- connect transport endpoint name
-  finally communicator $ disconnect connection
+  finally actor $ disconnect connection
 
 withConnection2 ::Endpoint -> Name -> Name -> IO () -> IO ()
 withConnection2 endpoint name1 name2 communicator =
@@ -285,22 +307,6 @@ withConnection4 endpoint name1 name2 name3 name4 communicator =
     withConnection endpoint name2 $
       withConnection endpoint name3 $
         withConnection endpoint name4 communicator
-
-{-|
-Messages are containers for arbitrary data that may be sent to other 'Network.Endpoints.Endpoint's.
--}
-type Message = B.ByteString
-
-{-|
-Name for uniquely identifying an 'Endpoint'; suitable for identifying
-the target destination for a 'Message'.
-
--}
-newtype Name = Name String deriving (Eq,Ord,Show,Generic)
-
-instance Serialize Name
-
-type Names = TVar (S.Set Name )
 
 {-|
 Send a 'Message' to specific 'Name' via the indicated 'Endpoint'.

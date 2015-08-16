@@ -37,7 +37,7 @@ testEndpointTransport = do
 _log :: String
 _log = "_test_memory"
 
-testEndpointSendReceive = testTransportEndpointSendReceive newMemoryTransport
+testEndpointSendReceive = testTransportEndpointSendReceive newMemoryTransport (Name "name1") (Name "name2")
 
 -- Memory tests
 

@@ -84,10 +84,8 @@ troubleshoot fn = do
         updateGlobalLogger rootLoggerName (setLevel INFO)
         fn) (updateGlobalLogger rootLoggerName (setLevel WARNING))
 
-testTransportEndpointSendReceive :: IO Transport -> Assertion
-testTransportEndpointSendReceive transportFactory = do
-  let name1 = Name "endpoint1"
-      name2 = Name "endpoint2"
+testTransportEndpointSendReceive :: IO Transport -> Name -> Name -> Assertion
+testTransportEndpointSendReceive transportFactory name1 name2 = do
   transport <- transportFactory
   withEndpoint2 transport $ \endpoint1 endpoint2 -> do
     withBinding2 (endpoint1,name1) (endpoint2,name2) $ do

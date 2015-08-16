@@ -35,8 +35,6 @@ import Control.Monad
 import qualified Data.Map as M
 import qualified Data.Set as S
 
-import Text.Printf
-
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -58,7 +56,6 @@ memoryBind vBindings endpoint name = atomically $ do
   bindings <- readTVar vBindings
   case M.lookup name bindings of
     Nothing -> do
-      modifyTVar (endpointNames endpoint) $ S.insert name
       modifyTVar vBindings $ M.insert name endpoint
       return Binding {
         bindingName = name,
@@ -67,14 +64,13 @@ memoryBind vBindings endpoint name = atomically $ do
     Just _ -> throw $ BindingExists name
 
 memoryUnbind :: Bindings -> Endpoint -> Name -> IO ()
-memoryUnbind vBindings endpoint name = atomically $ do
-  modifyTVar (endpointNames endpoint) $ S.delete name
+memoryUnbind vBindings _ name = atomically $ do
   modifyTVar vBindings $ M.delete name
 
 type Bindings = TVar (M.Map Name Endpoint)
 
 memoryConnect :: Connections -> Bindings -> Endpoint -> Name -> IO Connection
-memoryConnect vConnections vBindings origin name = do
+memoryConnect vConnections vBindings origin name =
   atomically $ do
     connections <- readTVar vConnections
     case M.lookup name connections of
@@ -84,11 +80,10 @@ memoryConnect vConnections vBindings origin name = do
           Nothing -> throw $ ConnectionHasNoBoundPeer name
           Just destination -> do
             modifyTVar (endpointOutbound origin) $ M.insert name $ endpointInbound destination
-            names <- readTVar $ endpointNames origin
+            names <- readTVar $ boundEndpointNames origin
             forM_ (S.elems names) $ \peer -> modifyTVar (endpointOutbound destination) $ M.insert peer $ endpointInbound origin
             modifyTVar vConnections $ M.insert name origin
             return Connection {
-              connectionDestination = name,
               disconnect = memoryDisconnect vConnections origin destination name
             }
       Just _ -> throw $ ConnectionExists name
@@ -96,9 +91,9 @@ memoryConnect vConnections vBindings origin name = do
 type Connections = TVar (M.Map Name Endpoint)
 
 memoryDisconnect :: Connections -> Endpoint -> Endpoint -> Name -> IO ()
-memoryDisconnect vConnections origin destination name = do
+memoryDisconnect vConnections origin destination name =
   atomically $ do
     modifyTVar (endpointOutbound origin) $ M.delete name
-    names <- readTVar $ endpointNames origin
+    names <- readTVar $ boundEndpointNames origin
     forM_ (S.elems names) $ \peer -> modifyTVar (endpointOutbound destination) $ M.delete peer
     modifyTVar vConnections $ M.delete name

@@ -29,6 +29,7 @@ extra-source-files:  changes.md
                      tests/TestMailbox.hs
                      tests/TestMemory.hs
                      tests/TestRPC.hs
+                     tests/TestTCP.hs
                      tests/TestUtils.hs
 
 homepage:          http://github.com/hargettp/courier

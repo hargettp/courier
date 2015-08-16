@@ -20,6 +20,7 @@ import Test.Framework
 import qualified TestMailbox as MB
 import qualified TestMemory as M
 import qualified TestRPC as R
+import qualified TestTCP as T
 
 -----------------------------------------------------------------------------
 -----------------------------------------------------------------------------
@@ -41,3 +42,4 @@ tests =
   MB.tests
   ++ M.tests
   ++ R.tests
+  ++ T.tests

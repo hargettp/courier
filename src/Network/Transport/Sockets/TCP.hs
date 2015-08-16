@@ -12,7 +12,11 @@
 --
 -----------------------------------------------------------------------------
 module Network.Transport.Sockets.TCP (
-  newTCPTransport
+  newTCPTransport4,
+  newTCPTransport6,
+
+  tcpSocketResolver4,
+  tcpSocketResolver6
   ) where
 
 -- local imports
@@ -36,52 +40,80 @@ import qualified Network.Socket.ByteString as NSB
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
+type SocketConnections = TVar (M.Map NS.SockAddr Connection)
 
-newTCPTransport :: NS.Family -> Resolver -> Endpoint -> IO Transport
-newTCPTransport family resolver endpoint = atomically $ do
-  vBindings <- newTVar M.empty
-  vConnections <- newTVar M.empty
+newTCPTransport :: NS.Family -> Resolver -> IO Transport
+newTCPTransport family resolver = atomically $ do
   vPeers <- newTVar M.empty
   return Transport {
-    bind = tcpBind family resolver vBindings,
-    connect =  socketConnect vConnections (tcpConnect family resolver) ,
-    shutdown = tcpShutdown vBindings vConnections vPeers
+    bind = tcpBind family resolver,
+    connect =  socketConnect $ tcpConnect family resolver,
+    shutdown = tcpShutdown vPeers
   }
 
-tcpBind :: NS.Family -> Resolver -> SocketBindings -> Endpoint -> Name -> IO Binding
-tcpBind family resolver vBindings endpoint name = do
-  alreadyBound <- atomically $ do
-    bindings <- readTVar vBindings
-    return $ M.lookup name bindings
-  case alreadyBound of
-    Nothing -> do
-      listener <- async tcpListener
-      vListener <- atomically $ newTMVar listener
-      atomically $ modifyTVar vBindings $ M.insert name $ SocketBinding {
-        socketBindingName = name,
-        socketListener = vListener
-      }
+newTCPTransport4 :: Resolver -> IO Transport
+newTCPTransport4 = newTCPTransport NS.AF_INET
+
+newTCPTransport6 :: Resolver -> IO Transport
+newTCPTransport6 = newTCPTransport NS.AF_INET6
+
+tcpSocketResolver4 :: Name -> IO [NS.SockAddr]
+tcpSocketResolver4 = socketResolver4 NS.Stream
+
+tcpSocketResolver6 :: Name -> IO [NS.SockAddr]
+tcpSocketResolver6 = socketResolver6 NS.Stream
+
+tcpBind :: NS.Family -> Resolver -> Endpoint -> Name -> IO Binding
+tcpBind family resolver _ name = do
+  vConnections <- atomically $ newTVar M.empty
+  listener <- async $ tcpListen family resolver vConnections name
   return Binding {
     bindingName = name,
-    unbind = tcpUnbind
+    unbind = cancel listener
   }
 
-tcpUnbind :: IO ()
-tcpUnbind = return ()
+tcpListen :: NS.Family -> Resolver -> SocketConnections -> Name -> IO ()
+tcpListen family resolver vConnections name = do
+  socket <- listen family NS.Stream resolver name
+  finally (accept socket vConnections)
+    (tcpUnbind socket)
+
+accept :: NS.Socket -> SocketConnections -> IO ()
+accept socket vConnections = do
+  (peer,peerAddress) <- NS.accept socket
+  let socketConn = tcpConnection peer
+      conn = Connection {
+      }
+  maybeOldConn <- atomically $ do
+    connections <- readTVar vConnections
+    let oldConn = M.lookup peerAddress connections
+    modifyTVar vConnections $ M.insert peerAddress conn
+    return oldConn
+  case maybeOldConn of
+    Just conn -> disconnect conn
+    Nothing -> return ()
+  accept socket vConnections
+
+tcpUnbind :: NS.Socket -> IO ()
+tcpUnbind socket = NS.close socket
 
 tcpConnect :: NS.Family -> Resolver -> Endpoint -> Name -> IO SocketConnection
 tcpConnect family resolver endpoint name = do
   socket <- NS.socket family NS.Stream NS.defaultProtocol
   address <- resolve1 resolver name
   NS.connect socket address
-  return SocketConnection {
-    disconnectSocketConnection = tcpDisconnect socket,
-    sendSocketMessage = tcpSend socket,
-    receiveSocketMessage = tcpReceive socket
-  }
+  conn <- tcpConnection socket
+  return conn
 
-tcpListener :: IO ()
-tcpListener = return ()
+tcpConnection :: NS.Socket -> IO SocketConnection
+tcpConnection socket = do
+  vName <- atomically newEmptyTMVar
+  return SocketConnection {
+    connectionDestination = vName,
+    sendSocketMessage = tcpSend socket,
+    receiveSocketMessage = tcpReceive socket,
+    disconnectSocket = tcpDisconnect socket
+  }
 
 tcpSend :: NS.Socket -> Message -> IO ()
 tcpSend socket message = do
@@ -101,11 +133,11 @@ tcpReceive socket = return BS.empty
 tcpDisconnect :: NS.Socket -> IO ()
 tcpDisconnect = NS.close
 
-tcpShutdown :: SocketBindings -> SocketConnections -> SocketConnections -> IO ()
-tcpShutdown vBindings vConnections vPeers = do
-  bindings <- atomically $ readTVar vBindings
-  connections <- atomically $ readTVar vConnections
+tcpShutdown :: SocketConnections -> IO ()
+tcpShutdown vPeers = do
   peers <- atomically $ readTVar vPeers
-  forM_ (M.elems bindings) $ \binding -> do
-    listener <- atomically $ takeTMVar $ socketListener binding
-    cancel listener
+  -- this is how we disconnect incoming connections
+  -- we don't have to disconnect  outbound connectinos, because
+  -- they should already be disconnected before here
+  forM_ (M.elems peers) disconnect
+  return ()

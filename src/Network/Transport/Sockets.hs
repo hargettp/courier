@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Network.Transport.Sockets
@@ -13,17 +15,20 @@
 -----------------------------------------------------------------------------
 module Network.Transport.Sockets (
   SocketConnection(..),
-  SocketConnections,
+  Connections,
   socketConnect,
-  SocketBinding(..),
-  SocketBindings,
+
+  listen,
 
   messenger,
   connector,
 
   Resolver(..),
+  ResolverException,
   resolve1,
-  socketResolver
+  socketResolver4,
+  socketResolver6,
+  wildcard
   ) where
 
 -- local imports
@@ -37,6 +42,7 @@ import Control.Concurrent.STM
 import Control.Exception
 
 import qualified Data.Map as M
+import Data.Typeable
 
 import qualified Network.Socket as NS
 
@@ -46,14 +52,30 @@ import qualified Network.Socket as NS
 type Connect = Endpoint -> Name -> IO SocketConnection
 -- type Disconnect = IO ()
 
-data Resolver = Resolver {
-  resolve :: Name -> IO [NS.SockAddr]
-  }
+type Resolver = Name -> IO [NS.SockAddr]
+
+-- data Resolver = Resolver {
+--   resolve :: Name -> IO [NS.SockAddr]
+--   }
+
+data SocketConnection = SocketConnection {
+  connectionDestination :: TMVar Name,
+  sendSocketMessage :: Message -> IO (),
+  receiveSocketMessage :: IO Message,
+  disconnectSocket :: IO ()
+}
+
+data ResolverException = CannotResolveName Name
+  deriving (Show,Typeable)
+
+instance Exception ResolverException
 
 resolve1 :: Resolver -> Name -> IO NS.SockAddr
-resolve1 resolver name = do
-  addresses <- resolve resolver name
-  return $ head addresses
+resolve1 resolve name = do
+  addresses <- resolve name
+  case addresses of
+    [] -> throw $ CannotResolveName name
+    (address:_) -> return address
 
 socketResolver :: NS.Family -> NS.SocketType -> Name -> IO [NS.SockAddr]
 socketResolver family socketType name =
@@ -70,42 +92,45 @@ socketResolver family socketType name =
       _ -> let (w',ws') = split ws
         in (w:w',ws')
 
-data SocketConnection = SocketConnection {
-  disconnectSocketConnection :: IO (),
-  sendSocketMessage :: Message -> IO (),
-  receiveSocketMessage :: IO Message
-}
+socketResolver4 :: NS.SocketType -> Name -> IO [NS.SockAddr]
+socketResolver4 = socketResolver NS.AF_INET
 
-type SocketConnections = TVar (M.Map Name (Async ()))
+socketResolver6 ::NS.SocketType ->  Name -> IO [NS.SockAddr]
+socketResolver6 = socketResolver NS.AF_INET6
 
-data SocketBinding = SocketBinding {
-  socketBindingName :: Name,
-  socketListener :: TMVar (Async () )
-}
+wildcard :: NS.SockAddr -> IO NS.SockAddr
+wildcard address =
+    case address of
+        NS.SockAddrInet port _ -> return $ NS.SockAddrInet port NS.iNADDR_ANY
+        NS.SockAddrInet6 port flow _ scope -> return $ NS.SockAddrInet6 port flow NS.iN6ADDR_ANY scope
+        _ -> return address
 
-type SocketBindings = TVar (M.Map Name SocketBinding)
--- type SocketBindings = TVar (M.Map Name (Async ()))
+listen :: NS.Family -> NS.SocketType -> Resolver -> Name -> IO NS.Socket
+listen family socketType resolver name = do
+  address <- resolve1 resolver name
+  socket <- NS.socket family socketType NS.defaultProtocol
+  NS.setSocketOption socket NS.NoDelay 1
+  NS.setSocketOption socket NS.ReuseAddr 1
+  wildcard address >>= NS.bind socket
+  NS.listen socket 2048 -- TODO think about a configurable backlog
+  return socket
 
-socketConnect :: SocketConnections -> Connect -> Endpoint -> Name  -> IO Connection
-socketConnect vConnections factory endpoint name = do
-  alreadyConnected <- atomically $ do
-    connections <- readTVar vConnections
-    return $ M.lookup name connections
-  case alreadyConnected of
-    Nothing -> do
-      conn <- async $ connector endpoint name factory
-      atomically $ modifyTVar vConnections $ M.insert name conn
-      return Connection {
-        connectionDestination = name,
-        disconnect = cancel conn
-      }
-    Just _ -> throw $ ConnectionExists name
+-- type SocketConnections = TVar (M.Map Name (Async ()))
+type Connections = TVar (M.Map Name Connection)
+
+socketConnect :: Connect -> Endpoint -> Name  -> IO Connection
+socketConnect sConnect endpoint name = do
+  connr <- async $ connector endpoint name sConnect
+  let conn = Connection {
+    disconnect = cancel connr
+  }
+  return conn
 
 connector :: Endpoint -> Name -> Connect -> IO ()
 connector endpoint name transportConnect = loopUntilKilled $ do
   connection <- transportConnect endpoint name
-  finally (messenger endpoint name connection) $
-    disconnectSocketConnection connection
+  finally (messenger endpoint connection) $
+    disconnectSocket connection
   where
     loopUntilKilled fn =
       catch (catch fn untilKilled)
@@ -115,17 +140,27 @@ connector endpoint name transportConnect = loopUntilKilled $ do
     untilKilled :: AsyncException -> IO ()
     untilKilled _ = return ()
 
-messenger :: Endpoint -> Name -> SocketConnection -> IO ()
-messenger endpoint name connection =
+messenger :: Endpoint -> SocketConnection -> IO ()
+messenger endpoint connection =
   -- counting on race_ to kill reader & writer
   -- if messenger is killed; since it uses withAsync, it should
   race_ reader writer
   where
     reader = do
       msg <- receiveSocketMessage connection
+      -- TODO consider a way of using a message to identify the name of
+      -- the endpoint on the other end of the connection
       atomically $ postMessage endpoint msg
       reader
     writer = do
-      msg <- atomically $ pullMessage endpoint name
+      msg <- atomically $ do
+        -- this basically means we wait until we have a name
+        name <- readTMVar $ connectionDestination connection
+        pullMessage endpoint name
       sendSocketMessage connection msg
       writer
+
+-- listener :: SocketConnections -> Accept -> Endpoint -> Name -> IO ()
+-- listener vConnections sAccept endpoint name = do
+--   conn <- sAccept
+--   atomically $ modifyTVar vConnections $ \conns -> M.insert
