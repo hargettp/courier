@@ -85,7 +85,7 @@ troubleshoot fn = do
         fn) (updateGlobalLogger rootLoggerName (setLevel WARNING))
 
 testTransportEndpointSendReceive :: IO Transport -> Name -> Name -> Assertion
-testTransportEndpointSendReceive transportFactory name1 name2 = do
+testTransportEndpointSendReceive transportFactory name1 name2 = timeBound (1 * 1000000 :: Int) $ do
   transport <- transportFactory
   withEndpoint2 transport $ \endpoint1 endpoint2 -> do
     withBinding2 (endpoint1,name1) (endpoint2,name2) $ do
