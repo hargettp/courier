@@ -23,7 +23,7 @@ module Network.Transport.Sockets (
   messenger,
   connector,
 
-  Resolver(..),
+  Resolver,
   ResolverException,
   resolve1,
   socketResolver4,
@@ -45,14 +45,6 @@ import qualified Data.Map as M
 import Data.Typeable
 
 import qualified Network.Socket as NS
-
-import Data.List
-
-import Debug.Trace
-
-import GHC.Stack
-
-import Text.Printf
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -136,50 +128,35 @@ socketConnect sConnect endpoint name = do
 
 connector :: Endpoint -> Name -> Connect -> IO ()
 connector endpoint name transportConnect = loopUntilKilled $ do
-  traceM $ printf "starting connector to %v" (show name)
   connection <- transportConnect endpoint name
   atomically $ putTMVar (connectionDestination connection) name
-  finally (messenger endpoint connection) $ do
+  finally (messenger endpoint connection) $
     disconnectSocket connection
-    traceM $ printf "stopped connector to %v" (show name)
-
   where
     loopUntilKilled fn =
       catch (catch fn untilKilled)
         (loop fn)
     loop :: IO () -> SomeException -> IO ()
-    loop fn e =  do
-      stack <- currentCallStack
-      traceM $ printf "Error %v connecting to %v: \n\t%v" (show e) (show name) (intercalate "\n\t" stack)
-      loopUntilKilled fn
+    loop fn _ = loopUntilKilled fn
     untilKilled :: AsyncException -> IO ()
     untilKilled _ = return ()
 
 messenger :: Endpoint -> SocketConnection -> IO ()
-messenger endpoint connection = do
+messenger endpoint connection =
   -- counting on race_ to kill reader & writer
   -- if messenger is killed; since it uses withAsync, it should
-  traceM $ printf "starting messenger"
-  finally (race_ reader writer) $ do
-    traceM $ printf "stopped messenger "
+  race_ reader writer
   where
     reader = do
-      traceM $ printf "starting reader"
       msg <- receiveSocketMessage connection
       -- TODO consider a way of using a message to identify the name of
       -- the endpoint on the other end of the connection
       atomically $ postMessage endpoint msg
       reader
     writer = do
-      traceM $ printf "starting writer"
       msg <- atomically $ do
         -- this basically means we wait until we have a name
         name <- readTMVar $ connectionDestination connection
         pullMessage endpoint name
       sendSocketMessage connection msg
       writer
-
--- listener :: SocketConnections -> Accept -> Endpoint -> Name -> IO ()
--- listener vConnections sAccept endpoint name = do
---   conn <- sAccept
---   atomically $ modifyTVar vConnections $ \conns -> M.insert

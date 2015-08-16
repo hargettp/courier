@@ -38,9 +38,6 @@ import Data.Serialize
 import qualified Network.Socket as NS
 import qualified Network.Socket.ByteString as NSB
 
-import Debug.Trace
-import Text.Printf
-
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 type SocketConnections = TVar (M.Map NS.SockAddr Connection)
@@ -68,7 +65,6 @@ tcpSocketResolver6 = socketResolver6 NS.Stream
 
 tcpBind :: NS.Family -> Resolver -> Endpoint -> Name -> IO Binding
 tcpBind family resolver endpoint name = do
-  traceM $ printf "binding on %v" (show name)
   vConnections <- atomically $ newTVar M.empty
   listener <- async $ tcpListen family resolver vConnections endpoint name
   return Binding {
@@ -79,13 +75,11 @@ tcpBind family resolver endpoint name = do
 tcpListen :: NS.Family -> Resolver -> SocketConnections -> Endpoint -> Name -> IO ()
 tcpListen family resolver vConnections endpoint name = do
   socket <- listen family NS.Stream resolver name
-  traceM $ printf "listening on %v (%v)" (show name) (show socket)
   finally (accept socket vConnections endpoint)
-    (tcpUnbind name socket)
+    (tcpUnbind socket)
 
 accept :: NS.Socket -> SocketConnections -> Endpoint -> IO ()
 accept socket vConnections endpoint = do
-  traceM $ printf "accepting connections on %v" (show socket)
   (peer,peerAddress) <- NS.accept socket
   connection <- tcpConnection peer
   msngr <- async $ messenger endpoint connection
@@ -98,24 +92,19 @@ accept socket vConnections endpoint = do
     modifyTVar vConnections $ M.insert peerAddress conn
     return oldConn
   case maybeOldConn of
-    Just conn -> disconnect conn
+    Just oldConn -> disconnect oldConn
     Nothing -> return ()
   accept socket vConnections endpoint
 
-tcpUnbind :: Name -> NS.Socket -> IO ()
-tcpUnbind name socket = do
-  traceM $ printf "unbinding on %v (%v)" (show name) (show socket)
-  NS.close socket
+tcpUnbind :: NS.Socket -> IO ()
+tcpUnbind = NS.close
 
 tcpConnect :: NS.Family -> Resolver -> Endpoint -> Name -> IO SocketConnection
-tcpConnect family resolver endpoint name = do
-  traceM $ printf "connecting to %v" (show name)
+tcpConnect family resolver _ name = do
   socket <- NS.socket family NS.Stream NS.defaultProtocol
   address <- resolve1 resolver name
   NS.connect socket address
-  traceM $ printf "connected to %v via %v(%v)" (show name) (show socket) (show address)
-  conn <- tcpConnection socket
-  return conn
+  tcpConnection socket
 
 tcpConnection :: NS.Socket -> IO SocketConnection
 tcpConnection socket = do
@@ -130,34 +119,21 @@ tcpConnection socket = do
 tcpSend :: NS.Socket -> Message -> IO ()
 tcpSend socket message = do
   let len = BS.length message
-  traceM $ printf "sending length %v" len
   NSB.sendAll socket $ encode len
-  traceM $ printf "sending message %v" (show message)
   NSB.sendAll socket message
 
 tcpReceive :: NS.Socket -> IO Message
-tcpReceive socket = do
-  msg <- readBytesWithLength
-  traceM $ printf "received message %v" (show msg)
-  return msg
+tcpReceive socket = readBytesWithLength
   where
     readBytesWithLength = do
-      traceM $ printf "receiving length on %v" (show socket)
       lengthBytes <- readBytes 8 -- TODO must figure out what defines length of an integer in bytes
       case decode lengthBytes of
-        Left _ -> do
-          traceM $ printf "no data read"
-          throw NoDataRead
-        Right length -> do
-          traceM $ printf "received length of %v" length
-          msg <- readBytes length
-          return msg
+        Left _ -> throw NoDataRead
+        Right len -> readBytes len
     readBytes = NSB.recv socket
 
 tcpDisconnect :: NS.Socket -> IO ()
-tcpDisconnect socket  = do
-  NS.close socket
-  traceM $ printf "disconnected from %v" (show socket)
+tcpDisconnect = NS.close
 
 tcpShutdown :: SocketConnections -> IO ()
 tcpShutdown vPeers = do
