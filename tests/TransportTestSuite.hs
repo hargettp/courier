@@ -16,15 +16,15 @@ import Network.Endpoints
 import TestUtils
 
 -- external imports
-import Control.Concurrent
-import Control.Concurrent.Async
-import Control.Exception
+-- import Control.Concurrent
+-- import Control.Concurrent.Async
+-- import Control.Exception
 
 import Data.Serialize
 
-import qualified Network.Socket as NS
+-- import qualified Network.Socket as NS
 
-import System.Log.Logger
+-- import System.Log.Logger
 
 import Test.Framework
 import Test.HUnit
@@ -34,12 +34,12 @@ import Test.Framework.Providers.HUnit
 --------------------------------------------------------------------------------
 
 transportTestSuite :: IO Transport -> String -> Name -> Name -> [Test.Framework.Test]
-transportTestSuite transport label name1 name2 = [
-  testCase (label ++ "-sendReceive") $
+transportTestSuite transport transportLabel name1 name2 = [
+  testCase (transportLabel ++ "-sendReceive") $
     testTransportEndpointSendReceive transport name1 name2,
-  testCase (label ++ "-sendReceive-2-serial-servers") $
+  testCase (transportLabel ++ "-sendReceive-2-serial-servers") $
     testTransportEndpointSendReceive2SerialServers transport name1 name2,
-  testCase  (label ++ "-sendReceive-2-serial-clients") $
+  testCase  (transportLabel ++ "-sendReceive-2-serial-clients") $
     testTransportEndpointSendReceive2SerialClients transport name1 name2
   ]
 
