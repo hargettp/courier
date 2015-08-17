@@ -30,6 +30,7 @@ extra-source-files:  changes.md
                      tests/TestMemory.hs
                      tests/TestRPC.hs
                      tests/TestTCP.hs
+                     tests/TestUDP.hs
                      tests/TransportTestSuite.hs
                      tests/TestUtils.hs
 
@@ -56,6 +57,7 @@ library
                   Network.Transport.Memory
                   Network.Transport.Sockets
                   Network.Transport.Sockets.TCP
+                  Network.Transport.Sockets.UDP
                   Control.Concurrent.Mailbox
                   Network.RPC
 

@@ -19,6 +19,7 @@ import qualified TestMailbox as MB
 import qualified TestMemory as M
 import qualified TestRPC as R
 import qualified TestTCP as T
+import qualified TestUDP as U
 
 -----------------------------------------------------------------------------
 -----------------------------------------------------------------------------
@@ -27,9 +28,10 @@ main :: IO ()
 main = do
   initLogging
   ipv6 <- isIPv6Available
+  let allTests = tests ++ T.tests4 ++ U.tests4
   if ipv6
-    then defaultMain (tests ++ T.tests4 ++ T.tests6)
-    else defaultMain (tests ++ T.tests4)
+    then defaultMain (allTests ++ T.tests6 ++ U.tests6)
+    else defaultMain allTests
 
 initLogging :: IO ()
 initLogging = do

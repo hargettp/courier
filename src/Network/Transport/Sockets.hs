@@ -18,7 +18,7 @@ module Network.Transport.Sockets (
   Connections,
   socketConnect,
 
-  listen,
+  socketListen,
 
   messenger,
   connector,
@@ -105,8 +105,8 @@ wildcard address =
         NS.SockAddrInet6 port flow _ scope -> return $ NS.SockAddrInet6 port flow NS.iN6ADDR_ANY scope
         _ -> return address
 
-listen :: NS.Family -> NS.SocketType -> Resolver -> Name -> IO NS.Socket
-listen family socketType resolver name = do
+socketListen :: NS.Family -> NS.SocketType -> Resolver -> Name -> IO NS.Socket
+socketListen family socketType resolver name = do
   address <- resolve1 resolver name
   socket <- NS.socket family socketType NS.defaultProtocol
   NS.setSocketOption socket NS.NoDelay 1

@@ -76,7 +76,7 @@ tcpBind family resolver endpoint name = do
 
 tcpListen :: NS.Family -> Resolver -> SocketConnections -> Endpoint -> Name -> IO ()
 tcpListen family resolver vConnections endpoint name = do
-  socket <- listen family NS.Stream resolver name
+  socket <- socketListen family NS.Stream resolver name
   finally (accept socket vConnections endpoint)
     (tcpUnbind socket)
 
