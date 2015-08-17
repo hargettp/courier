@@ -65,20 +65,17 @@ udpSocketResolver6 = socketResolver6 NS.Datagram
 
 udpBind :: NS.Family -> Resolver -> Endpoint -> Name -> IO Binding
 udpBind family resolver endpoint name = do
-  listener <- async $ udpListen family resolver endpoint name
-  return Binding {
-    bindingName = name,
-    unbind = cancel listener
-  }
-
-udpListen :: NS.Family -> Resolver -> Endpoint -> Name -> IO ()
-udpListen family resolver endpoint name = do
   socket <- NS.socket family NS.Datagram NS.defaultProtocol
   address <- resolve1 resolver name
   NS.setSocketOption socket NS.ReuseAddr 1
   NS.bindSocket socket address
-  finally (reader socket)
-    (udpUnbind socket)
+  listener <- async $
+    finally (reader socket)
+      (udpUnbind socket)
+  return Binding {
+    bindingName = name,
+    unbind = cancel listener
+  }
   where
     reader socket = do
       msg <- udpReceive socket
