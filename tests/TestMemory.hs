@@ -5,11 +5,9 @@ module TestMemory (tests) where
 import Network.Endpoints
 import Network.Transport.Memory
 
-import TestUtils
+import TransportTestSuite
 
 -- external imports
-
-import Data.Serialize
 
 import Test.Framework
 import Test.HUnit
@@ -21,13 +19,13 @@ import Test.Framework.Providers.HUnit
 tests :: [Test.Framework.Test]
 tests = [
     testCase "mem-endpoints+transport" testEndpointTransport,
-    {-
-    testCase "mem-bind" testEndpointBind,
-    testCase "mem-unbind" testEndpointBindUnbind,
-    -}
-    testCase "mem-sendReceive" testEndpointSendReceive,
     testCase "mem-transport" testMemoryTransport
   ]
+  ++ transportTestSuite
+    newMemoryTransport
+    "mem"
+    (Name "name1")
+    (Name "name2")
 
 testEndpointTransport :: Assertion
 testEndpointTransport = do
@@ -37,7 +35,6 @@ testEndpointTransport = do
 _log :: String
 _log = "_test_memory"
 
-testEndpointSendReceive = testTransportEndpointSendReceive newMemoryTransport (Name "name1") (Name "name2")
 
 -- Memory tests
 

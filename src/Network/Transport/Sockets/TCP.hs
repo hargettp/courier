@@ -16,7 +16,9 @@ module Network.Transport.Sockets.TCP (
   newTCPTransport6,
 
   tcpSocketResolver4,
-  tcpSocketResolver6
+  tcpSocketResolver6,
+
+  module Network.Endpoints
   ) where
 
 -- local imports
