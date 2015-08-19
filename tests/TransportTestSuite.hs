@@ -15,16 +15,7 @@ module TransportTestSuite
 import Network.Endpoints
 import TestUtils
 
--- external imports
--- import Control.Concurrent
--- import Control.Concurrent.Async
--- import Control.Exception
-
 import Data.Serialize
-
--- import qualified Network.Socket as NS
-
--- import System.Log.Logger
 
 import Test.Framework
 import Test.HUnit
