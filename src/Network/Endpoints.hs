@@ -47,6 +47,7 @@ module Network.Endpoints (
   dispatchMessageTimeout,
 
   -- * Other types
+  Envelope(..),
   Message,
   Name(..),
   Names,
@@ -144,6 +145,14 @@ newtype Name = Name String deriving (Eq,Ord,Show,Generic)
 instance Serialize Name
 
 type Names = TVar (S.Set Name )
+
+{- An 'Envelope' wraps a 'Message' with the 'Name's of the sender and receive -}
+
+data Envelope = Envelope {
+  messageSender :: Maybe Name,
+  messageReceiver :: Name,
+  envelopeMessage :: Message
+} deriving (Eq,Show)
 
 {-|
 Create a new 'Endpoint' using the provided transports.
