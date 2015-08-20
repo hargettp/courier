@@ -54,6 +54,7 @@ library
 
   exposed-modules:
                   Network.Endpoints
+                  Network.Transport
                   Network.Transport.Memory
                   Network.Transport.Sockets
                   Network.Transport.Sockets.TCP

@@ -1,7 +1,7 @@
 module TestUDP (
   tests4
   ,tests6
-  ) where
+) where
 
 -- local imports
 

@@ -51,26 +51,6 @@ module Network.Endpoints (
   Name(..),
   Names,
 
-  -- * Transport
-  Transport(..),
-  TransportException(..),
-  withEndpoint,
-  withEndpoint2,
-  withEndpoint3,
-  withEndpoint4,
-  Binding(..),
-  BindException(..),
-  withBinding,
-  withBinding2,
-  withBinding3,
-  withBinding4,
-  Connection(..),
-  ConnectException(..),
-  withConnection,
-  withConnection2,
-  withConnection3,
-  withConnection4
-
   ) where
 
 -- local imports
@@ -82,14 +62,11 @@ import Control.Concurrent.Async
 import Control.Concurrent.Mailbox
 import Control.Concurrent.STM
 
-import Control.Exception
-
 import qualified Data.Map as M
 
 import qualified Data.ByteString as B
 import Data.Serialize
 import qualified Data.Set as S
-import Data.Typeable
 
 import GHC.Generics
 
@@ -140,7 +117,7 @@ Endpoints are a locus of communication, used for sending and receive messages.
 -}
 data Endpoint = Endpoint {
   -- | The 'Transport' used by this 'Endpoint'
-  endpointTransport :: Transport,
+  -- endpointTransport :: Transport,
   -- | The 'Mailbox' where inbound 'Message's that the 'Endpoint' will receive are queued
   endpointInbound :: Mailbox Message,
   -- | The 'M.Map' of 'Mailbox'es where 'Message'es intended for other 'Endpoint's are
@@ -171,142 +148,16 @@ type Names = TVar (S.Set Name )
 {-|
 Create a new 'Endpoint' using the provided transports.
 -}
-newEndpoint :: Transport -> IO Endpoint
-newEndpoint transport = atomically $ do
+newEndpoint :: IO Endpoint
+newEndpoint = atomically $ do
   inbound <- newMailbox
   outbound <- newTVar M.empty
   names <- newTVar S.empty
   return Endpoint {
-    endpointTransport = transport,
     endpointInbound = inbound,
     endpointOutbound = outbound,
     boundEndpointNames = names
     }
-
-{-|
-A 'Transport' defines a specific method for establishing connections
-between 'Endpoint's.
--}
-data Transport = Transport {
-  bind :: Endpoint -> Name -> IO Binding,
-  connect :: Endpoint -> Name -> IO Connection,
-  shutdown :: IO ()
-  }
-
-data TransportException =
-  NoDataRead |
-  DataUnderflow
-  deriving (Show,Typeable)
-
-instance Exception TransportException
-
-withEndpoint :: Transport -> (Endpoint -> IO ()) -> IO ()
-withEndpoint transport communicator =
-  finally
-    (newEndpoint transport >>= communicator)
-    (shutdown transport)
-
-withEndpoint2 :: Transport -> (Endpoint -> Endpoint -> IO ()) -> IO ()
-withEndpoint2 transport fn =
-  withEndpoint transport $ \endpoint1 ->
-    withEndpoint transport $ \endpoint2 -> fn endpoint1 endpoint2
-
-withEndpoint3 :: Transport -> (Endpoint -> Endpoint -> Endpoint -> IO () ) -> IO ()
-withEndpoint3 transport fn =
-  withEndpoint transport $ \endpoint1 ->
-    withEndpoint transport $ \endpoint2 ->
-      withEndpoint transport $ \endpoint3 -> fn endpoint1 endpoint2 endpoint3
-
-withEndpoint4 :: Transport -> (Endpoint -> Endpoint -> Endpoint -> Endpoint -> IO () ) -> IO ()
-withEndpoint4 transport fn =
-  withEndpoint2 transport $ \endpoint1 endpoint2 ->
-    withEndpoint2 transport $ \endpoint3 endpoint4 -> fn endpoint1 endpoint2 endpoint3 endpoint4
-
-{-|
-Bindings are a site for receiving messages on a particular 'Name'
-through a 'Transport'.
--}
-data Binding = Binding {
-  bindingName :: Name,
-  unbind :: IO ()
-  }
-
-data BindException =
-  BindingExists Name |
-  BindingDoesNotExist Name
-  deriving (Show,Typeable)
-
-instance Exception BindException
-
-withBinding :: Endpoint -> Name -> IO () -> IO ()
-withBinding endpoint name actor = do
-  let transport = endpointTransport endpoint
-  atomically $ do
-    bindings <- readTVar $ boundEndpointNames endpoint
-    if S.member name bindings
-      then throw $ BindingExists name
-      else modifyTVar (boundEndpointNames endpoint) $ S.insert name
-  binding <- bind transport endpoint name
-  finally actor $ do
-    unbind binding
-    atomically $ modifyTVar (boundEndpointNames endpoint) $ S.delete name
-
-withBinding2 :: (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
-withBinding2 (endpoint1,name1) (endpoint2,name2) fn =
-  withBinding endpoint1 name1 $
-    withBinding endpoint2 name2 fn
-
-withBinding3 :: (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
-withBinding3 (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) fn =
-  withBinding endpoint1 name1 $
-    withBinding endpoint2 name2 $
-      withBinding endpoint3 name3 fn
-
-withBinding4 :: (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
-withBinding4 (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) (endpoint4,name4) fn =
-  withBinding endpoint1 name1 $
-    withBinding endpoint2 name2 $
-      withBinding endpoint3 name3 $
-        withBinding endpoint4 name4 fn
-
-{-
-Connections are pathways for sending messages to an 'Endpoint' bound to a specific 'Name'
--}
-data Connection = Connection {
-  disconnect :: IO ()
-}
-
-data ConnectException =
-  ConnectionExists Name |
-  ConnectionDoesNotExist Name |
-  ConnectionHasNoBoundPeer Name
-  deriving (Show,Typeable)
-
-instance Exception ConnectException
-
-withConnection :: Endpoint -> Name -> IO () -> IO ()
-withConnection endpoint name actor = do
-  let transport = endpointTransport endpoint
-  connection <- connect transport endpoint name
-  finally actor $ disconnect connection
-
-withConnection2 ::Endpoint -> Name -> Name -> IO () -> IO ()
-withConnection2 endpoint name1 name2 communicator =
-  withConnection endpoint name1 $
-    withConnection endpoint name2 communicator
-
-withConnection3 ::Endpoint -> Name -> Name -> Name -> IO () -> IO ()
-withConnection3 endpoint name1 name2 name3 communicator =
-  withConnection endpoint name1 $
-    withConnection endpoint name2 $
-      withConnection endpoint name3 communicator
-
-withConnection4 ::Endpoint -> Name -> Name -> Name -> Name -> IO () -> IO ()
-withConnection4 endpoint name1 name2 name3 name4 communicator =
-  withConnection endpoint name1 $
-    withConnection endpoint name2 $
-      withConnection endpoint name3 $
-        withConnection endpoint name4 communicator
 
 {-|
 Send a 'Message' to specific 'Name' via the indicated 'Endpoint'.

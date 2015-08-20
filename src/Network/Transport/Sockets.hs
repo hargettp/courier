@@ -28,12 +28,16 @@ module Network.Transport.Sockets (
   resolve1,
   socketResolver4,
   socketResolver6,
-  wildcard
-  ) where
+  wildcard,
+
+  module Network.Transport
+
+) where
 
 -- local imports
 
 import Network.Endpoints
+import Network.Transport
 
 -- external imports
 

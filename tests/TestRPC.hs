@@ -62,8 +62,8 @@ testOneHearCall = do
         name2 = Name "endpoint2"
     transport <- newMemoryTransport
     withEndpoint2 transport $ \endpoint1 endpoint2 ->
-      withBinding2 (endpoint1,name1) (endpoint2,name2) $ do
-        withConnection endpoint1 name2 $ do
+      withBinding2 transport (endpoint1,name1) (endpoint2,name2) $ do
+        withConnection transport endpoint1 name2 $ do
           _ <- async $ do
               (bytes,reply) <- hear endpoint2 name2 "foo"
               let Right msg = decode bytes
@@ -80,9 +80,9 @@ testOneCallHear = do
   transport <- newMemoryTransport
   withEndpoint transport $ \endpoint1 ->
     withEndpoint transport $ \endpoint2 ->
-      withBinding endpoint1 name1 $
-        withBinding endpoint2 name2 $ do
-          withConnection endpoint1 name2 $ do
+      withBinding transport endpoint1 name1 $
+        withBinding transport endpoint2 name2 $ do
+          withConnection transport endpoint1 name2 $ do
             let cs = newCallSite endpoint1 name1
             acall <- async $ call cs name2 "foo" $ encode "hello"
             _ <- async $ do
@@ -100,9 +100,9 @@ testConcurrentCallHear = do
   transport <- newMemoryTransport
   withEndpoint transport $ \endpoint1 ->
     withEndpoint transport $ \endpoint2 ->
-      withBinding endpoint1 name1 $
-        withBinding endpoint2 name2 $
-          withConnection endpoint1 name2 $ do
+      withBinding transport endpoint1 name1 $
+        withBinding transport endpoint2 name2 $
+          withConnection transport endpoint1 name2 $ do
             let cs1 = newCallSite endpoint1 name1
                 cs2 = newCallSite endpoint2 name2
             let call1 = call cs1 name2 "foo" $ encode "hello"
@@ -130,9 +130,9 @@ testOneHandler = do
   transport <- newMemoryTransport
   withEndpoint transport $ \endpoint1 ->
     withEndpoint transport $ \endpoint2 ->
-      withBinding endpoint1 name1 $
-        withBinding endpoint2 name2 $
-          withConnection endpoint1 name2 $ do
+      withBinding transport endpoint1 name1 $
+        withBinding transport endpoint2 name2 $
+          withConnection transport endpoint1 name2 $ do
             h <- handle endpoint2 name2 "foo" $ \bytes ->
                 let Right msg = decode bytes
                 in return $ encode $ msg ++ "!"
@@ -149,9 +149,9 @@ testTwoHandlers = do
   transport <- newMemoryTransport
   withEndpoint transport $ \endpoint1 ->
     withEndpoint transport $ \endpoint2 ->
-      withBinding endpoint1 name1 $
-        withBinding endpoint2 name2 $
-          withConnection endpoint1 name2 $ do
+      withBinding transport endpoint1 name1 $
+        withBinding transport endpoint2 name2 $
+          withConnection transport endpoint1 name2 $ do
             h1 <- handle endpoint2 name2 "foo" $ \bytes ->
                 let Right msg = decode bytes
                 in return $ encode $ msg ++ "!"
@@ -176,8 +176,8 @@ testGroupCall = do
         name4 = Name "endpoint4"
     transport <- newMemoryTransport
     withEndpoint4 transport $ \endpoint1 endpoint2 endpoint3 endpoint4 -> do
-      withBinding4 (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) (endpoint4,name4) $
-        withConnection3 endpoint1 name2 name3 name4 $ do
+      withBinding4 transport (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) (endpoint4,name4) $
+        withConnection3 transport endpoint1 name2 name3 name4 $ do
           h2 <- handle endpoint2 name2 "foo" $ \bytes -> let Right msg = decode bytes in
                                                             return $ encode $ if msg == "hello" then "foo" else ""
           h3 <- handle endpoint3 name3 "foo" $ \bytes -> let Right msg = decode bytes in

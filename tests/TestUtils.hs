@@ -9,10 +9,11 @@ module TestUtils
 
     ,isIPv6Available
     )
-    where
+  where
 
 -- local imports
 
+import Network.Endpoints
 import Network.Transport.Sockets.TCP
 
 -- external imports

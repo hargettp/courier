@@ -18,12 +18,13 @@ module Network.Transport.Sockets.UDP (
   udpSocketResolver4,
   udpSocketResolver6,
 
-  module Network.Endpoints
-  ) where
+  module Network.Transport
+) where
 
 -- local imports
 
 import Network.Endpoints
+import Network.Transport
 import Network.Transport.Sockets
 
 -- external imports

@@ -19,12 +19,16 @@
 -----------------------------------------------------------------------------
 
 module Network.Transport.Memory (
-  newMemoryTransport
-  ) where
+  newMemoryTransport,
+
+  module Network.Transport
+
+) where
 
 -- local imports
 
 import Network.Endpoints
+import Network.Transport
 
 -- external imports
 

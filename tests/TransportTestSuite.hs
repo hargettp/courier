@@ -7,12 +7,13 @@ module TransportTestSuite
     ,testTransportEndpointSendReceive2SerialServers
 
     ,module TestUtils
-    )
-    where
+  )
+  where
 
 -- local imports
 
 import Network.Endpoints
+import Network.Transport
 import TestUtils
 
 import Data.Serialize
@@ -40,8 +41,8 @@ testTransportEndpointSendReceive :: IO Transport -> Name -> Name -> Assertion
 testTransportEndpointSendReceive transportFactory name1 name2 = timeBound (1 * 1000000 :: Int) $ do
   transport <- transportFactory
   withEndpoint2 transport $ \endpoint1 endpoint2 -> do
-    withBinding2 (endpoint1,name1) (endpoint2,name2) $ do
-      withConnection endpoint1 name2 $ do
+    withBinding2 transport (endpoint1,name1) (endpoint2,name2) $ do
+      withConnection transport endpoint1 name2 $ do
         sendMessage endpoint1 name2 $ encode "hello!"
         msg <- receiveMessage endpoint2
         assertEqual "Received message not same as sent" (Right "hello!") (decode msg)
@@ -51,8 +52,8 @@ testTransportEndpointSend2Receive2 :: IO Transport -> Name -> Name -> Assertion
 testTransportEndpointSend2Receive2 transportFactory name1 name2 = timeBound (1 * 1000000 :: Int) $ do
   transport <- transportFactory
   withEndpoint2 transport $ \endpoint1 endpoint2 -> do
-    withBinding2 (endpoint1,name1) (endpoint2,name2) $ do
-      withConnection endpoint1 name2 $ do
+    withBinding2 transport (endpoint1,name1) (endpoint2,name2) $ do
+      withConnection transport endpoint1 name2 $ do
         sendMessage endpoint1 name2 $ encode "hello!"
         msg1 <- receiveMessage endpoint2
         assertEqual "Received message not same as sent" (Right "hello!") (decode msg1)
@@ -65,15 +66,15 @@ testTransportEndpointSendReceive2SerialServers :: IO Transport -> Name -> Name -
 testTransportEndpointSendReceive2SerialServers transportFactory name1 name2 = timeBound (1 * 1000000 :: Int) $ do
   transport <- transportFactory
   withEndpoint2 transport $ \endpoint1 endpoint2 -> do
-    withBinding endpoint1 name1 $ do
-      withBinding endpoint2 name2 $ do
-        withConnection endpoint1 name2 $ do
+    withBinding transport endpoint1 name1 $ do
+      withBinding transport endpoint2 name2 $ do
+        withConnection transport endpoint1 name2 $ do
           sendMessage endpoint1 name2 $ encode "hello!"
           msg <- receiveMessage endpoint2
           assertEqual "Received message not same as sent" (Right "hello!") (decode msg)
           return ()
-      withBinding endpoint2 name2 $ do
-        withConnection endpoint1 name2 $ do
+      withBinding transport endpoint2 name2 $ do
+        withConnection transport endpoint1 name2 $ do
           sendMessage endpoint1 name2 $ encode "hello!"
           msg <- receiveMessage endpoint2
           assertEqual "Received message not same as sent" (Right "hello!") (decode msg)
@@ -83,15 +84,15 @@ testTransportEndpointSendReceive2SerialClients :: IO Transport -> Name -> Name -
 testTransportEndpointSendReceive2SerialClients transportFactory name1 name2 = timeBound (1 * 1000000 :: Int) $ do
   transport <- transportFactory
   withEndpoint2 transport $ \endpoint1 endpoint2 -> do
-    withBinding endpoint2 name2 $ do
-      withBinding endpoint1 name1 $ do
-        withConnection endpoint1 name2 $ do
+    withBinding transport endpoint2 name2 $ do
+      withBinding transport endpoint1 name1 $ do
+        withConnection transport endpoint1 name2 $ do
           sendMessage endpoint1 name2 $ encode "hello!"
           msg <- receiveMessage endpoint2
           assertEqual "Received message not same as sent" (Right "hello!") (decode msg)
           return ()
-      withBinding endpoint1 name1 $ do
-        withConnection endpoint1 name2 $ do
+      withBinding transport endpoint1 name1 $ do
+        withConnection transport endpoint1 name2 $ do
           sendMessage endpoint1 name2 $ encode "hello!"
           msg <- receiveMessage endpoint2
           assertEqual "Received message not same as sent" (Right "hello!") (decode msg)
