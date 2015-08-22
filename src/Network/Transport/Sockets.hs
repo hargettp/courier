@@ -44,6 +44,7 @@ import Network.Transport
 import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Exception
+import Control.Monad
 
 import qualified Data.Map as M
 import Data.Typeable
@@ -115,7 +116,8 @@ socketListen family socketType resolver name = do
   socket <- NS.socket family socketType NS.defaultProtocol
   NS.setSocketOption socket NS.NoDelay 1
   NS.setSocketOption socket NS.ReuseAddr 1
-  NS.setSocketOption socket NS.ReusePort 1
+  when (NS.isSupportedSocketOption NS.ReusePort)
+    $ NS.setSocketOption socket NS.ReusePort 1
   wildcard address >>= NS.bind socket
   NS.listen socket 2048 -- TODO think about a configurable backlog
   return socket
