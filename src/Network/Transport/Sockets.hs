@@ -150,18 +150,18 @@ messenger :: Mailboxes -> Endpoint -> SocketConnection -> IO ()
 messenger mailboxes endpoint connection =
   -- counting on race_ to kill reader & writer
   -- if messenger is killed; since it uses withAsync, it should
-  race_ reader writer
+  race_ receiver sender
   where
-    reader = do
+    receiver = do
       msg <- receiveSocketMessage connection
       -- TODO consider a way of using a message to identify the name of
       -- the endpoint on the other end of the connection
       atomically $ postMessage endpoint msg
-      reader
-    writer = do
+      receiver
+    sender = do
       msg <- atomically $ do
         -- this basically means we wait until we have a name
         name <- readTMVar $ connectionDestination connection
         pullMessage mailboxes name
       sendSocketMessage connection msg
-      writer
+      sender
