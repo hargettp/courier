@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -47,7 +48,11 @@ import Control.Exception
 import Control.Monad
 
 import qualified Data.Map as M
+import qualified Data.Set as S
+import Data.Serialize
 import Data.Typeable
+
+import GHC.Generics
 
 import qualified Network.Socket as NS
 
@@ -74,6 +79,13 @@ data ResolverException = CannotResolveName Name
   deriving (Show,Typeable)
 
 instance Exception ResolverException
+
+data SocketMessage =
+  IdentifySender Name
+  | SocketMessage Message
+  deriving (Generic)
+
+instance Serialize SocketMessage
 
 resolve1 :: Resolver -> Name -> IO NS.SockAddr
 resolve1 resolve name = do
@@ -136,7 +148,12 @@ socketConnect mailboxes sConnect endpoint name = do
 connector :: Mailboxes -> Endpoint -> Name -> Connect -> IO ()
 connector mailboxes endpoint name transportConnect = loopUntilKilled $ do
   connection <- transportConnect endpoint name
-  atomically $ putTMVar (connectionDestination connection) name
+  origins <- atomically $ do
+    putTMVar (connectionDestination connection) name
+    readTVar $ boundEndpointNames endpoint
+  forM_ (S.elems origins) $ \origin ->
+    -- atomically $ dispatchMessage mailboxes name $ encode $ IdentifySender origin
+    sendSocketMessage connection $ encode $ IdentifySender origin
   finally (messenger mailboxes endpoint connection) $
     disconnectSocket connection
   where
@@ -155,15 +172,18 @@ messenger mailboxes endpoint connection =
   race_ receiver sender
   where
     receiver = do
-      msg <- receiveSocketMessage connection
+      smsg <- receiveSocketMessage connection
       -- TODO consider a way of using a message to identify the name of
       -- the endpoint on the other end of the connection
-      atomically $ postMessage endpoint msg
+      case decode smsg of
+        Left _ -> return ()
+        Right (IdentifySender name) -> atomically $ putTMVar (connectionDestination connection) name
+        Right (SocketMessage msg) -> atomically $ postMessage endpoint msg
       receiver
     sender = do
       msg <- atomically $ do
         -- this basically means we wait until we have a name
         name <- readTMVar $ connectionDestination connection
         pullMessage mailboxes name
-      sendSocketMessage connection msg
+      sendSocketMessage connection $ encode $ SocketMessage msg
       sender
