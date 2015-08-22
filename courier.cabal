@@ -69,8 +69,8 @@ library
     -- -O2
     -- -fprof-auto
 
-  other-modules:
-                  Network.Transport.Internal
+  -- other-modules:
+
   build-depends:       base >=4.6 && <5,
                        async,
                        bytestring,
