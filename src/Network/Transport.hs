@@ -111,7 +111,7 @@ dispatcher mailboxes endpoint = do
     disp = do
       atomically $ do
         envelope <- readMailbox $ endpointOutbound endpoint
-        let name = messageReceiver envelope
+        let name = messageDestination envelope
             msg = envelopeMessage envelope
         dispatchMessage mailboxes name msg
       disp

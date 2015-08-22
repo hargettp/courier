@@ -140,8 +140,8 @@ type Names = TVar (S.Set Name )
 {- An 'Envelope' wraps a 'Message' with the 'Name's of the sender and receive -}
 
 data Envelope = Envelope {
-  messageSender :: Maybe Name,
-  messageReceiver :: Name,
+  messageOrigin :: Maybe Name,
+  messageDestination :: Name,
   envelopeMessage :: Message
 } deriving (Eq,Show)
 
