@@ -48,9 +48,11 @@ type SocketConnections = TVar (M.Map NS.SockAddr Connection)
 newTCPTransport :: NS.Family -> Resolver -> IO Transport
 newTCPTransport family resolver = atomically $ do
   vPeers <- newTVar M.empty
+  mailboxes <- newTVar M.empty
   return Transport {
-    bind = tcpBind family resolver,
-    connect =  socketConnect $ tcpConnect family resolver,
+    bind = tcpBind mailboxes family resolver,
+    dispatch = dispatcher mailboxes,
+    connect =  socketConnect mailboxes $ tcpConnect family resolver,
     shutdown = tcpShutdown vPeers
   }
 
@@ -66,26 +68,26 @@ tcpSocketResolver4 = socketResolver4 NS.Stream
 tcpSocketResolver6 :: Name -> IO [NS.SockAddr]
 tcpSocketResolver6 = socketResolver6 NS.Stream
 
-tcpBind :: NS.Family -> Resolver -> Endpoint -> Name -> IO Binding
-tcpBind family resolver endpoint name = do
+tcpBind :: Mailboxes -> NS.Family -> Resolver -> Endpoint -> Name -> IO Binding
+tcpBind mailboxes family resolver endpoint name = do
   vConnections <- atomically $ newTVar M.empty
-  listener <- async $ tcpListen family resolver vConnections endpoint name
+  listener <- async $ tcpListen mailboxes family resolver vConnections endpoint name
   return Binding {
     bindingName = name,
     unbind = cancel listener
   }
 
-tcpListen :: NS.Family -> Resolver -> SocketConnections -> Endpoint -> Name -> IO ()
-tcpListen family resolver vConnections endpoint name = do
+tcpListen :: Mailboxes -> NS.Family -> Resolver -> SocketConnections -> Endpoint -> Name -> IO ()
+tcpListen mailboxes family resolver vConnections endpoint name = do
   socket <- socketListen family NS.Stream resolver name
-  finally (accept socket vConnections endpoint)
+  finally (accept mailboxes socket vConnections endpoint)
     (tcpUnbind socket)
 
-accept :: NS.Socket -> SocketConnections -> Endpoint -> IO ()
-accept socket vConnections endpoint = do
+accept :: Mailboxes -> NS.Socket -> SocketConnections -> Endpoint -> IO ()
+accept mailboxes socket vConnections endpoint = do
   (peer,peerAddress) <- NS.accept socket
   connection <- tcpConnection peer
-  msngr <- async $ messenger endpoint connection
+  msngr <- async $ messenger mailboxes endpoint connection
   let conn = Connection {
     disconnect = cancel msngr
   }
@@ -97,7 +99,7 @@ accept socket vConnections endpoint = do
   case maybeOldConn of
     Just oldConn -> disconnect oldConn
     Nothing -> return ()
-  accept socket vConnections endpoint
+  accept mailboxes socket vConnections endpoint
 
 tcpUnbind :: NS.Socket -> IO ()
 tcpUnbind = NS.close

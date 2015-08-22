@@ -122,19 +122,19 @@ socketListen family socketType resolver name = do
 -- type SocketConnections = TVar (M.Map Name (Async ()))
 type Connections = TVar (M.Map Name Connection)
 
-socketConnect :: Connect -> Endpoint -> Name  -> IO Connection
-socketConnect sConnect endpoint name = do
-  connr <- async $ connector endpoint name sConnect
+socketConnect :: Mailboxes -> Connect -> Endpoint -> Name  -> IO Connection
+socketConnect mailboxes sConnect endpoint name = do
+  connr <- async $ connector mailboxes endpoint name sConnect
   let conn = Connection {
     disconnect = cancel connr
   }
   return conn
 
-connector :: Endpoint -> Name -> Connect -> IO ()
-connector endpoint name transportConnect = loopUntilKilled $ do
+connector :: Mailboxes -> Endpoint -> Name -> Connect -> IO ()
+connector mailboxes endpoint name transportConnect = loopUntilKilled $ do
   connection <- transportConnect endpoint name
   atomically $ putTMVar (connectionDestination connection) name
-  finally (messenger endpoint connection) $
+  finally (messenger mailboxes endpoint connection) $
     disconnectSocket connection
   where
     loopUntilKilled fn =
@@ -145,8 +145,8 @@ connector endpoint name transportConnect = loopUntilKilled $ do
     untilKilled :: AsyncException -> IO ()
     untilKilled _ = return ()
 
-messenger :: Endpoint -> SocketConnection -> IO ()
-messenger endpoint connection =
+messenger :: Mailboxes -> Endpoint -> SocketConnection -> IO ()
+messenger mailboxes endpoint connection =
   -- counting on race_ to kill reader & writer
   -- if messenger is killed; since it uses withAsync, it should
   race_ reader writer
@@ -161,6 +161,6 @@ messenger endpoint connection =
       msg <- atomically $ do
         -- this basically means we wait until we have a name
         name <- readTMVar $ connectionDestination connection
-        pullMessage endpoint name
+        pullMessage mailboxes name
       sendSocketMessage connection msg
       writer

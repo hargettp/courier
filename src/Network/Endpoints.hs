@@ -36,15 +36,12 @@ module Network.Endpoints (
   receiveMessage,
   receiveMessageTimeout,
   postMessage,
-  pullMessage,
 
   -- * Selective message reception
   selectMessage,
   selectMessageTimeout,
   detectMessage,
   detectMessageTimeout,
-  dispatchMessage,
-  dispatchMessageTimeout,
 
   -- * Other types
   Envelope(..),
@@ -62,8 +59,6 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.Mailbox
 import Control.Concurrent.STM
-
-import qualified Data.Map as M
 
 import qualified Data.ByteString as B
 import Data.Serialize
@@ -121,14 +116,10 @@ data Endpoint = Endpoint {
   -- endpointTransport :: Transport,
   -- | The 'Mailbox' where inbound 'Message's that the 'Endpoint' will receive are queued
   endpointInbound :: Mailbox Message,
-  -- | The 'M.Map' of 'Mailbox'es where 'Message'es intended for other 'Endpoint's are
-  --   queued for the 'Transport' to eventually send
-  endpointOutbound :: Mailboxes,
+  endpointOutbound :: Mailbox Envelope,
   -- | The 'Name's to which the 'Endpoint' is bound
   boundEndpointNames :: Names
   }
-
-type Mailboxes = TVar (M.Map Name (Mailbox Message))
 
 {-|
 Messages are containers for arbitrary data that may be sent to other 'Network.Endpoints.Endpoint's.
@@ -160,7 +151,7 @@ Create a new 'Endpoint' using the provided transports.
 newEndpoint :: IO Endpoint
 newEndpoint = atomically $ do
   inbound <- newMailbox
-  outbound <- newTVar M.empty
+  outbound <- newMailbox
   names <- newTVar S.empty
   return Endpoint {
     endpointInbound = inbound,
@@ -172,15 +163,8 @@ newEndpoint = atomically $ do
 Send a 'Message' to specific 'Name' via the indicated 'Endpoint'.
 -}
 sendMessage :: Endpoint -> Name -> Message -> IO ()
-sendMessage endpoint name msg  = atomically $ do
-    outbound <- readTVar $ endpointOutbound endpoint
-    mailbox <- case M.lookup name outbound of
-      Nothing -> do
-        mailbox <- newMailbox
-        modifyTVar (endpointOutbound endpoint) $ M.insert name mailbox
-        return mailbox
-      Just mailbox -> return mailbox
-    writeMailbox mailbox msg
+sendMessage endpoint name msg  = atomically $
+    writeMailbox (endpointOutbound endpoint) $ Envelope Nothing name msg
 
 {-|
 Helper for sending a single 'Message' to several 'Endpoint's.
@@ -213,17 +197,6 @@ as a general queue of ordered messages.
 -}
 postMessage :: Endpoint -> Message -> STM ()
 postMessage endpoint = writeMailbox (endpointInbound endpoint)
-
-{-
-Pull a 'Message' intended for a destination name from an 'Endpoint' directly,
-without the use of a 'Transport'
--}
-pullMessage :: Endpoint -> Name -> STM Message
-pullMessage endpoint destination = do
-  outbound <- readTVar $ endpointOutbound endpoint
-  case M.lookup destination outbound of
-    Nothing -> retry
-    Just mailbox -> readMailbox mailbox
 
 {-|
 Select the next available message in the 'Endpoint' 'Mailbox' matching
@@ -264,23 +237,6 @@ to this function could find the message if it is not consumed immediately.
 detectMessageTimeout :: Endpoint -> Int -> (Message -> Maybe v) -> IO (Maybe v)
 detectMessageTimeout endpoint delay testFn = do
   resultOrTimeout <- race (detectMessage endpoint testFn) (threadDelay delay)
-  case resultOrTimeout of
-    Left result -> return $ Just result
-    Right () -> return Nothing
-
-{-|
-Dispatch the next available message in the 'Endpoint' 'Mailbox' matching
-the supplied test function, or blocking until one is available. Once a
-matching message is found, handle the message with the supplied handler
-and return any result obtained. This function differs from 'receiveMessage'
-in that it supports out of order message reception.
--}
-dispatchMessage :: Endpoint -> (Message -> Maybe v) -> (v -> IO r) -> IO r
-dispatchMessage endpoint = handleMailbox (endpointInbound endpoint)
-
-dispatchMessageTimeout :: Endpoint -> Int -> (Message -> Maybe v) -> (v -> IO r) -> IO (Maybe r)
-dispatchMessageTimeout endpoint delay testFn handleFn = do
-  resultOrTimeout <- race (dispatchMessage endpoint testFn handleFn) (threadDelay delay)
   case resultOrTimeout of
     Left result -> return $ Just result
     Right () -> return Nothing

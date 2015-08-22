@@ -46,9 +46,11 @@ type SocketConnections = TVar (M.Map NS.SockAddr Connection)
 newUDPTransport :: NS.Family -> Resolver -> IO Transport
 newUDPTransport family resolver = atomically $ do
   vPeers <- newTVar M.empty
+  mailboxes <- newTVar M.empty
   return Transport {
     bind = udpBind family resolver,
-    connect = udpConnect family resolver,
+    dispatch = dispatcher mailboxes,
+    connect = udpConnect mailboxes family resolver,
     shutdown = udpShutdown vPeers
   }
 
@@ -71,25 +73,25 @@ udpBind family resolver endpoint name = do
   NS.setSocketOption socket NS.ReuseAddr 1
   NS.bindSocket socket address
   listener <- async $
-    finally (reader socket)
+    finally (receiver socket)
       (udpUnbind socket)
   return Binding {
     bindingName = name,
     unbind = cancel listener
   }
   where
-    reader socket = do
+    receiver socket = do
       msg <- udpReceive socket
       -- TODO consider a way of using a message to identify the name of
       -- the endpoint on the other end of the connection
       atomically $ postMessage endpoint msg
-      reader socket
+      receiver socket
 
 udpUnbind :: NS.Socket -> IO ()
 udpUnbind = NS.close
 
-udpConnect :: NS.Family -> Resolver -> Endpoint -> Name -> IO Connection
-udpConnect family resolver endpoint name = do
+udpConnect :: Mailboxes -> NS.Family -> Resolver -> Endpoint -> Name -> IO Connection
+udpConnect mailboxes family resolver _ name = do
   socket <- NS.socket family NS.Datagram NS.defaultProtocol
   address <- resolve1 resolver name
   sender <- async $ finally (writer socket address) (udpDisconnect socket)
@@ -98,7 +100,7 @@ udpConnect family resolver endpoint name = do
   }
   where
     writer socket address = do
-      msg <- atomically $ pullMessage endpoint name
+      msg <- atomically $ pullMessage mailboxes name
       udpSend socket address msg
       writer socket address
 

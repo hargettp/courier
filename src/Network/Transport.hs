@@ -33,6 +33,13 @@ module Network.Transport (
   Transport(..),
   TransportException(..),
 
+  Dispatcher(..),
+  dispatcher,
+
+  Mailboxes,
+  pullMessage,
+  dispatchMessage,
+
   withEndpoint,
   withEndpoint2,
   withEndpoint3,
@@ -60,10 +67,12 @@ import Network.Endpoints
 
 -- external imports
 
--- import Control.Concurrent.Mailbox
+import Control.Concurrent.Async
+import Control.Concurrent.Mailbox
 import Control.Concurrent.STM
 import Control.Exception
 
+import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Typeable
 
@@ -76,9 +85,14 @@ between 'Endpoint's.
 -}
 data Transport = Transport {
   bind :: Endpoint -> Name -> IO Binding,
+  dispatch :: Endpoint -> IO Dispatcher,
   connect :: Endpoint -> Name -> IO Connection,
   shutdown :: IO ()
   }
+
+data Dispatcher = Dispatcher {
+  stop :: IO ()
+}
 
 data TransportException =
   NoDataRead |
@@ -87,11 +101,53 @@ data TransportException =
 
 instance Exception TransportException
 
+dispatcher :: Mailboxes -> Endpoint -> IO Dispatcher
+dispatcher mailboxes endpoint = do
+  d <- async disp
+  return Dispatcher {
+    stop = cancel d
+  }
+  where
+    disp = do
+      atomically $ do
+        envelope <- readMailbox $ endpointOutbound endpoint
+        let name = messageReceiver envelope
+            msg = envelopeMessage envelope
+        dispatchMessage mailboxes name msg
+      disp
+
+type Mailboxes = TVar (M.Map Name (Mailbox Message))
+
+{-
+Pull a 'Message' intended for a destination name from a 'Mailboxes' directly,
+without the use of a 'Transport'
+-}
+pullMessage :: Mailboxes -> Name -> STM Message
+pullMessage mailboxes destination = do
+  outbound <- readTVar mailboxes
+  case M.lookup destination outbound of
+    Nothing -> retry
+    Just mailbox -> readMailbox mailbox
+
+dispatchMessage :: Mailboxes -> Name -> Message -> STM ()
+dispatchMessage mailboxes name message = do
+  outbound <- readTVar mailboxes
+  mailbox <- case M.lookup name outbound of
+    Nothing -> do
+      mailbox <- newMailbox
+      modifyTVar mailboxes $ M.insert name mailbox
+      return mailbox
+    Just mailbox -> return mailbox
+  writeMailbox mailbox message
+
+
 withEndpoint :: Transport -> (Endpoint -> IO ()) -> IO ()
-withEndpoint transport communicator =
-  finally
-    (newEndpoint >>= communicator)
-    (shutdown transport)
+withEndpoint transport actor = do
+    endpoint <- newEndpoint
+    d <- dispatch transport endpoint
+    finally (actor endpoint) $
+      finally (stop d) $
+        shutdown transport
 
 withEndpoint2 :: Transport -> (Endpoint -> Endpoint -> IO ()) -> IO ()
 withEndpoint2 transport fn =

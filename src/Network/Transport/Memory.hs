@@ -27,17 +27,17 @@ module Network.Transport.Memory (
 
 -- local imports
 
+import Control.Concurrent.Mailbox
 import Network.Endpoints
 import Network.Transport
 
 -- external imports
 
+import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Exception
-import Control.Monad
 
 import qualified Data.Map as M
-import qualified Data.Set as S
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -48,12 +48,28 @@ Create a new memory 'Transport' for use by 'Network.Endpoint.Endpoint's.
 newMemoryTransport :: IO Transport
 newMemoryTransport = do
   vBindings <- atomically $ newTVar M.empty
-  vConnections <- atomically $ newTVar M.empty
   return Transport {
       bind = memoryBind vBindings,
-      connect = memoryConnect vConnections vBindings,
+      dispatch = memoryDispatcher vBindings,
+      connect = memoryConnect,
       shutdown = return ()
       }
+
+memoryDispatcher :: Bindings -> Endpoint -> IO Dispatcher
+memoryDispatcher vBindings endpoint = do
+  d <- async disp
+  return Dispatcher {
+    stop = cancel d
+  }
+  where
+    disp = do
+      atomically $ do
+        bindings <- readTVar vBindings
+        env <- readMailbox $ endpointOutbound endpoint
+        case M.lookup (messageReceiver env) bindings  of
+          Nothing -> return ()
+          Just destination -> postMessage destination (envelopeMessage env)
+      disp
 
 memoryBind :: Bindings -> Endpoint -> Name -> IO Binding
 memoryBind vBindings endpoint name = atomically $ do
@@ -73,31 +89,8 @@ memoryUnbind vBindings _ name = atomically $ do
 
 type Bindings = TVar (M.Map Name Endpoint)
 
-memoryConnect :: Connections -> Bindings -> Endpoint -> Name -> IO Connection
-memoryConnect vConnections vBindings origin name =
-  atomically $ do
-    connections <- readTVar vConnections
-    case M.lookup name connections of
-      Nothing -> do
-        bindings <- readTVar vBindings
-        case M.lookup name bindings of
-          Nothing -> throw $ ConnectionHasNoBoundPeer name
-          Just destination -> do
-            modifyTVar (endpointOutbound origin) $ M.insert name $ endpointInbound destination
-            names <- readTVar $ boundEndpointNames origin
-            forM_ (S.elems names) $ \peer -> modifyTVar (endpointOutbound destination) $ M.insert peer $ endpointInbound origin
-            modifyTVar vConnections $ M.insert name origin
-            return Connection {
-              disconnect = memoryDisconnect vConnections origin destination name
-            }
-      Just _ -> throw $ ConnectionExists name
-
-type Connections = TVar (M.Map Name Endpoint)
-
-memoryDisconnect :: Connections -> Endpoint -> Endpoint -> Name -> IO ()
-memoryDisconnect vConnections origin destination name =
-  atomically $ do
-    modifyTVar (endpointOutbound origin) $ M.delete name
-    names <- readTVar $ boundEndpointNames origin
-    forM_ (S.elems names) $ \peer -> modifyTVar (endpointOutbound destination) $ M.delete peer
-    modifyTVar vConnections $ M.delete name
+memoryConnect :: Endpoint -> Name -> IO Connection
+memoryConnect _ _ =
+  return Connection {
+    disconnect = return ()
+  }
