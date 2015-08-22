@@ -30,6 +30,7 @@ import Network.Transport.Sockets
 -- external imports
 
 import Control.Concurrent.Async
+import Control.Concurrent.Mailbox
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
@@ -44,15 +45,18 @@ import qualified Network.Socket.ByteString as NSB
 type SocketConnections = TVar (M.Map NS.SockAddr Connection)
 
 newUDPTransport :: NS.Family -> Resolver -> IO Transport
-newUDPTransport family resolver = atomically $ do
-  vPeers <- newTVar M.empty
-  mailboxes <- newTVar M.empty
-  return Transport {
-    bind = udpBind family resolver,
-    dispatch = dispatcher mailboxes,
-    connect = udpConnect mailboxes family resolver,
-    shutdown = udpShutdown vPeers
-  }
+newUDPTransport family resolver = do
+  socket <- NS.socket family NS.Datagram NS.defaultProtocol
+  atomically $ do
+    vPeers <- newTVar M.empty
+    mailboxes <- newTVar M.empty
+    vSocket <- newTMVar socket
+    return Transport {
+      bind = udpBind family resolver,
+      dispatch = udpDispatcher vSocket resolver,
+      connect = udpConnect mailboxes family resolver,
+      shutdown = udpShutdown vPeers
+    }
 
 newUDPTransport4 :: Resolver -> IO Transport
 newUDPTransport4 = newUDPTransport NS.AF_INET
@@ -86,6 +90,24 @@ udpBind family resolver endpoint name = do
       -- the endpoint on the other end of the connection
       atomically $ postMessage endpoint msg
       receiver socket
+
+udpDispatcher :: TMVar NS.Socket -> Resolver -> Endpoint -> IO Dispatcher
+udpDispatcher vSocket resolver endpoint = do
+  d <- async disp
+  return Dispatcher {
+    stop = cancel d
+  }
+  where
+    disp = do
+      (socket,name,msg) <- atomically $ do
+        envelope <- readMailbox $ endpointOutbound endpoint
+        let name = messageDestination envelope
+            msg = envelopeMessage envelope
+        socket <- readTMVar vSocket
+        return (socket,name,msg)
+      address <- resolve1 resolver name
+      udpSend socket address msg
+      disp
 
 udpUnbind :: NS.Socket -> IO ()
 udpUnbind = NS.close
