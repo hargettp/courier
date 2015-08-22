@@ -75,6 +75,7 @@ udpBind family resolver endpoint name = do
   socket <- NS.socket family NS.Datagram NS.defaultProtocol
   address <- resolve1 resolver name
   NS.setSocketOption socket NS.ReuseAddr 1
+  NS.setSocketOption socket NS.ReusePort 1
   NS.bindSocket socket address
   listener <- async $
     finally (receiver socket)
