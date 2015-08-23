@@ -1,12 +1,20 @@
 module TransportTestSuite
     (
-    transportTestSuite
+    transportTestSuite,
 
-    ,testTransportEndpointSendReceive
-    ,testTransportEndpointSendReceive2SerialClients
-    ,testTransportEndpointSendReceive2SerialServers
+    testTransportEndpointSendReceive,
+    testTransportEndpointSend2Receive2,
+    testTransportEndpointSendReceive2SerialServers,
+    testTransportEndpointSendReceive2SerialClients,
+    testTransportOneHearCall,
+    testTransportOneCallHear,
+    testTransportConcurrentCallHear,
+    testTransportOneHandler,
+    testTransportTwoHandlers,
+    testTransportGroupCall,
+    testTransportAnyCall,
 
-    ,module TestUtils
+    module TestUtils
   )
   where
 
@@ -53,7 +61,9 @@ transportTestSuite transport transportLabel name1 name2 name3 name4 = [
   testCase  (transportLabel ++ "-rpc-two-handlers") $
     testTransportTwoHandlers transport name1 name2,
   testCase  (transportLabel ++ "-rpc-group-call") $
-    testTransportGroupCall transport name1 name2 name3 name4
+    testTransportGroupCall transport name1 name2 name3 name4,
+  testCase  (transportLabel ++ "-rpc-any-call") $
+    testTransportAnyCall transport name1 name2 name3 name4
   ]
 
 timeLimited :: Assertion -> Assertion
@@ -240,6 +250,26 @@ testTransportGroupCall transportFactory name1 name2 name3 name4 = timeLimited $ 
         assertBool "Bar not present in results" (elem (encode "bar") $ M.elems results)
         assertBool "Bar not present in results" (elem (encode "baz") $ M.elems results)
         assertEqual "Unxpected number of results" 3 (M.size results)
+        hangup h2
+        hangup h3
+        hangup h4
+
+testTransportAnyCall :: IO Transport -> Name -> Name -> Name -> Name -> Assertion
+testTransportAnyCall transportFactory name1 name2 name3 name4 = timeLimited $ do
+  transport <- transportFactory
+  withEndpoint4 transport $ \endpoint1 endpoint2 endpoint3 endpoint4 -> do
+    withBinding4 transport (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) (endpoint4,name4) $
+      withConnection3 transport endpoint1 name2 name3 name4 $ do
+        h2 <- handle endpoint2 name2 "foo" $ \bytes -> let Right msg = decode bytes in
+                                                          return $ encode $ if msg == "hello" then "foo" else ""
+        h3 <- handle endpoint3 name3 "foo" $ \bytes -> let Right msg = decode bytes in
+                                                           return $ encode $ if msg == "hello" then "foo" else ""
+        h4 <- handle endpoint4 name4 "foo" $ \bytes -> let Right msg = decode bytes in
+                                                           return $ encode $ if msg == "hello" then "foo" else ""
+        let cs = newCallSite endpoint1 name1
+        (result,responder) <- (anyCall cs [name2,name3,name4] "foo" $ encode "hello")
+        assertEqual "Response should have been 'foo'" (encode "foo") result
+        assertBool "Responder was not in original list of names" $ elem responder [name2,name3,name4]
         hangup h2
         hangup h3
         hangup h4
