@@ -24,9 +24,7 @@ import Network.Transport.Memory
 
 -- external imports
 
-import Control.Applicative
 import Control.Concurrent
-import Control.Concurrent.Async
 
 import qualified Data.Map as M
 import Data.Serialize
