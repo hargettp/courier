@@ -3,7 +3,7 @@
 -- Module      :  Control.Concurrent.Mailbox
 -- Copyright   :  (c) Phil Hargett 2014
 -- License     :  MIT (see LICENSE file)
--- 
+--
 -- Maintainer  :  phil@haphazardhouse.net
 -- Stability   :  experimental
 -- Portability :  non-portable (uses STM)
@@ -11,7 +11,7 @@
 -- A 'Mailbox' is a drop-in replacement for 'TQueue' in "Control.Concurrent.STM", except that
 -- it also supports selective out of order message reception: that is, it allows the caller
 -- to dequeue the first message among the messages available in the queue that matches
--- a supplied test function, or block if no such match is possible with the messages currently 
+-- a supplied test function, or block if no such match is possible with the messages currently
 -- in the queue.
 --
 -- As 'Mailbox' implements the same basic @read / write / peek@ group of functions as a 'TQueue',
@@ -76,7 +76,7 @@ import Control.Concurrent.STM
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-data Mailbox m = Mailbox 
+data Mailbox m = Mailbox
     {-# UNPACK #-} !(TVar [m])
     {-# UNPACK #-} !(TVar [m])
 
@@ -234,7 +234,7 @@ tryFindMailbox (Mailbox _read write) testFn = do
                 Nothing -> return Nothing
 
 {-|
-Put a data item back onto a channel, where it will be the next item read.
+Put a data item back onto a mailbox, where it will be the next item read.
 -}
 unGetMailbox :: Mailbox m -> m -> STM ()
 unGetMailbox (Mailbox _read _write) msg = do
@@ -259,7 +259,7 @@ isEmptyMailbox (Mailbox _read write) = do
 --
 
 {-|
-Extract the first element from a list matching the 
+Extract the first element from a list matching the
 provided test and return a new list without the matching
 element.
 -}
@@ -272,7 +272,7 @@ extract test (x:xs) =
         Just v -> (Just v,xs)
 
 {-|
-Find the first element from a list matching the 
+Find the first element from a list matching the
 provided test, or Nothing if there is no match.
 -}
 find :: (m -> Maybe v) -> [m] -> Maybe v

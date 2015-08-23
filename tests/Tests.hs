@@ -2,7 +2,7 @@ module Main where
 
 -- local imports
 
-import Network.Endpoints
+import TestUtils
 
 -- external imports
 
@@ -13,15 +13,13 @@ import System.Log.Handler.Simple
 import System.Log.Logger
 
 import Test.Framework
-import Test.HUnit
-import Test.Framework.Providers.HUnit
 
 -- Test modules
 import qualified TestMailbox as MB
 import qualified TestMemory as M
+import qualified TestRPC as R
 import qualified TestTCP as T
 import qualified TestUDP as U
-import qualified TestRPC as R
 
 -----------------------------------------------------------------------------
 -----------------------------------------------------------------------------
@@ -29,7 +27,11 @@ import qualified TestRPC as R
 main :: IO ()
 main = do
   initLogging
-  defaultMain tests
+  ipv6 <- isIPv6Available
+  let allTests = tests ++ T.tests4 ++ U.tests4
+  if ipv6
+    then defaultMain (allTests ++ T.tests6 ++ U.tests6)
+    else defaultMain allTests
 
 initLogging :: IO ()
 initLogging = do
@@ -40,19 +42,6 @@ initLogging = do
 
 tests :: [Test.Framework.Test]
 tests =
-  [
-    testCase "hunit" (assertBool "HUnit assertion of truth is false" True),
-    testCase "endpoints" testEndpoint
-  ]
-  ++ MB.tests
+  MB.tests
   ++ M.tests
-  ++ T.tests
-  ++ U.tests
   ++ R.tests
-
--- Endpoint tests
-
-testEndpoint :: Assertion
-testEndpoint = do
-  _ <- newEndpoint []
-  return ()

@@ -3,23 +3,24 @@ module HelloWorld (
 ) where
 
  -- Just import this package to access the primary APIs
-import Network.Endpoints
+-- import Network.Endpoints
 
  -- A specific transport is necessary, however
-import Network.Transport.TCP
+-- import Network.Transport.TCP
 
 -- Needed for serialization
-import Data.Serialize
+-- import Data.Serialize
 
 main :: IO ()
-main = do
-    let name1 = "endpoint1"
-        name2 = "endpoint2"
+main = return ()
+{-
+    let name1 = Name "endpoint1"
+        name2 = Name "endpoint2"
         resolver = resolverFromList [(name1,"localhost:2000"),
                                 (name2,"localhost:2001")]
     transport <- newTCPTransport resolver
-    endpoint1 <- newEndpoint [transport]
-    endpoint2 <- newEndpoint [transport]
+    endpoint1 <- newEndpoint transport
+    endpoint2 <- newEndpoint transport
     Right () <- bindEndpoint endpoint1 name1
     Right () <- bindEndpoint endpoint2 name2
     sendMessage_ endpoint1 name2 $ encode "hello world!"
@@ -29,3 +30,4 @@ main = do
     Right () <- unbindEndpoint endpoint1 name1
     Right () <- unbindEndpoint endpoint2 name2
     shutdown transport
+-}

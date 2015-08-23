@@ -1,3 +1,17 @@
+0.1.1.1
+
+There are significant changes in this release, due to a complete rewrite of TCP connection handling, and,
+in so doing, a rewrite of the basic model for how transports and endpoints interact. This rewrite fixes
+bug #10.
+
+Endpoints now simply have inbound and outbound mailboxes, and a set of names to which the endpoint is bound
+via a transport. The intent is that endpoints are discrete entities orthogonal to the transport which moves
+messages between them. Its the job of the transport to move messages from the outbound mailbox of one endpoint
+to the inbound mailbox of the endpoint bound to the name specified in the envelope for a given message.
+
+New helpers for managing the lifecycle of bindings and connections now exist, and also a helper for setting the name
+of a client.
+
 0.1.0.15
 
     * Initial implementation of IPv6 transports (TCP and UDP)
@@ -102,16 +116,16 @@
    types of messages. Each message pump can operate independently of one another.
 
  * Fixed issue #2 and other interim bugs all resulting from multiple name bindings that resolve
-   the same underlying address.  Now, bound sockets are reused (with reference counting) so 
+   the same underlying address.  Now, bound sockets are reused (with reference counting) so
    that if there are multiple bindings to the same address only 1 socket is created and user.
 
- * Unit tests passing on Mac OS X again, mostly due to correct management of sockets and 
+ * Unit tests passing on Mac OS X again, mostly due to correct management of sockets and
    appropriate reuse.
- 
+
 0.1.0.7
 
   * First inclusion of changelog in package
-  
+
 0.1.0.6
 
  * Added simple implementation of transport for UDP

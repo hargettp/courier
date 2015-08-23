@@ -1,10 +1,10 @@
 name:                courier
-version:             0.1.0.15
+version:             0.1.1.1
 synopsis:           A message-passing library for simplifying network applications
-description:         Inspired by Erlang's simple message-passing facilities, courier provides roughly similar 
-                     capabilities. Applications simply create one or more endpoints, 
-                     bind each to a transport using a given name, then can freely 
-                     send / receive messages to other endpoints just by referencing the name each endpoint 
+description:         Inspired by Erlang's simple message-passing facilities, courier provides roughly similar
+                     capabilities. Applications simply create one or more endpoints,
+                     bind each to a transport using a given name, then can freely
+                     send / receive messages to other endpoints just by referencing the name each endpoint
                      bound to its transport.
                      .
                      A primary driver of this package's design is separation of concerns: many algorithms
@@ -14,12 +14,12 @@ description:         Inspired by Erlang's simple message-passing facilities, cou
                      the distributed algorithm itself.  With this in mind, this package aims
                      to provide a variety of transports as well as support for common communication
                      idioms (e.g., in order message delivery, selective out of order message delivery,
-                     synchronous RPC, etc.). 
+                     synchronous RPC, etc.).
                      .
                      Applications may process messages in the order received at an endpoint, or use
                      selective message reception to process the first message arriving at an endpoint
                      that also matches a provided selection function. Through selective message reception,
-                     applications may approximate the style of an Erlang application, and enjoy better 
+                     applications may approximate the style of an Erlang application, and enjoy better
                      composability of message reception with multiple independent dispatch routines or
                       message pumps.
 
@@ -30,8 +30,8 @@ extra-source-files:  changes.md
                      tests/TestMemory.hs
                      tests/TestRPC.hs
                      tests/TestTCP.hs
-                     tests/TestTransports.hs
                      tests/TestUDP.hs
+                     tests/TransportTestSuite.hs
                      tests/TestUtils.hs
 
 homepage:          http://github.com/hargettp/courier
@@ -56,15 +56,21 @@ library
                   Network.Endpoints
                   Network.Transport
                   Network.Transport.Memory
-                  Network.Transport.TCP
-                  Network.Transport.UDP
+                  Network.Transport.Sockets
+                  Network.Transport.Sockets.TCP
+                  Network.Transport.Sockets.UDP
                   Control.Concurrent.Mailbox
                   Network.RPC
 
-  ghc-options: -Wall -fno-state-hack
-  other-modules:
-                  Network.Transport.Internal
-                  Network.Transport.Sockets
+  ghc-options:
+    -Wall
+    -fno-state-hack
+    -threaded
+    -- -O2
+    -- -fprof-auto
+
+  -- other-modules:
+
   build-depends:       base >=4.6 && <5,
                        async,
                        bytestring,
@@ -76,16 +82,38 @@ library
                        text,
                        uuid
 
+executable echo-server
+  hs-source-dirs: echo
+  main-is: EchoServer.hs
+  ghc-options:
+    -Wall
+    -fno-state-hack
+    -threaded
+  build-depends:       base >=4.6 && <5,
+                       cereal,
+                       courier
+
+executable echo-client
+  hs-source-dirs: echo
+  main-is: EchoClient.hs
+  ghc-options:
+    -Wall
+    -fno-state-hack
+    -threaded
+  build-depends:      base >=4.6 && <5,
+                      cereal,
+                      courier
+
 Test-Suite test-courier
     type: exitcode-stdio-1.0
     hs-source-dirs: tests
     main-is: Tests.hs
-    build-depends: 
+    build-depends:
 
         -- base modules
-        base, 
+        base,
         -- testing support
-        HUnit, 
+        HUnit,
         test-framework,
         test-framework-hunit,
         -- Cabal,
@@ -100,4 +128,9 @@ Test-Suite test-courier
         -- this project's modules
         courier
 
-    ghc-options: -Wall -threaded
+    ghc-options:
+      -Wall
+      -threaded
+      -- -O2
+      -- -fprof-auto
+      -- "-with-rtsopts=-N -p -s -h -i0.1"

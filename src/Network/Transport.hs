@@ -1,11 +1,11 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveDataTypeable     #-}
 
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Network.Transport
--- Copyright   :  (c) Phil Hargett 2013
+-- Copyright   :  (c) Phil Hargett 2015
 -- License     :  MIT (see LICENSE file)
--- 
+--
 -- Maintainer  :  phil@haphazardhouse.net
 -- Stability   :  experimental
 -- Portability :  non-portable (requires STM)
@@ -18,8 +18,8 @@
 -- transport describes itself as supporting features like guaranteed delivery, applications
 -- should NOT assume that message delivery is reliable.
 --
--- For example, if a sender sends a message to a name that has not yet been bound, then 
--- immediately waits on the response for that message, then the application may hang, 
+-- For example, if a sender sends a message to a name that has not yet been bound, then
+-- immediately waits on the response for that message, then the application may hang,
 -- as the original message may have been dropped.
 --
 -- However, many application may find it easier to push features such as reliable
@@ -27,79 +27,148 @@
 -- to concern itself with the messages being delivered rather than how they arrive.
 --
 -----------------------------------------------------------------------------
-
 module Network.Transport (
-  Address,
-  Binding(..),
-  Envelope(..),
-  Message,
-  Name,
-  Resolver(..),
-  resolve,
-  resolverFromList,
-  Scheme,
-  Transport(..),
 
-  module Control.Concurrent.Mailbox
-  
-  ) where
+  -- * Transport
+  Transport(..),
+  TransportException(..),
+
+  Dispatcher(..),
+  dispatcher,
+
+  Mailboxes,
+  pullMessage,
+  dispatchMessage,
+
+  withEndpoint,
+  withEndpoint2,
+  withEndpoint3,
+  withEndpoint4,
+
+  Binding(..),
+  withBinding,
+  withBinding2,
+  withBinding3,
+  withBinding4,
+
+  Connection(..),
+  ConnectException(..),
+  withConnection,
+  withConnection2,
+  withConnection3,
+  withConnection4,
+
+) where
 
 -- local imports
-import Control.Concurrent.Mailbox
+
+import Network.Endpoints
 
 -- external imports
 
-import Data.ByteString as B
-import Data.Serialize
+import Control.Concurrent.Async
+import Control.Concurrent.Mailbox
+import Control.Concurrent.STM
+import Control.Exception
 
-import GHC.Generics
+import qualified Data.Map as M
+import qualified Data.Set as S
+import Data.Typeable
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
 {-|
-Messages are containers for arbitrary data that may be sent to other 'Network.Endpoints.Endpoint's.
+A 'Transport' defines a specific method for establishing connections
+between 'Endpoint's.
 -}
-type Message = B.ByteString
+data Transport = Transport {
+  bind :: Endpoint -> Name -> IO Binding,
+  dispatch :: Endpoint -> IO Dispatcher,
+  connect :: Endpoint -> Name -> IO Connection,
+  shutdown :: IO ()
+  }
+
+data Dispatcher = Dispatcher {
+  stop :: IO ()
+}
+
+data TransportException =
+  NoDataRead |
+  DataUnderflow
+  deriving (Show,Typeable)
+
+instance Exception TransportException
+
+dispatcher :: Mailboxes -> Endpoint -> IO Dispatcher
+dispatcher mailboxes endpoint = do
+  d <- async disp
+  return Dispatcher {
+    stop = cancel d
+  }
+  where
+    disp = do
+      atomically $ do
+        envelope <- readMailbox $ endpointOutbound endpoint
+        let name = messageDestination envelope
+            msg = envelopeMessage envelope
+        dispatchMessage mailboxes name msg
+      disp
+
+type Mailboxes = TVar (M.Map Name (Mailbox Message))
+
+{-
+Pull a 'Message' intended for a destination name from a 'Mailboxes' directly,
+without the use of a 'Transport'
+-}
+pullMessage :: Mailboxes -> Name -> STM Message
+pullMessage mailboxes destination = do
+  outbound <- readTVar mailboxes
+  case M.lookup destination outbound of
+    Nothing -> retry
+    Just mailbox -> readMailbox mailbox
+
+dispatchMessage :: Mailboxes -> Name -> Message -> STM ()
+dispatchMessage mailboxes name message = do
+  outbound <- readTVar mailboxes
+  mailbox <- case M.lookup name outbound of
+    Nothing -> do
+      mailbox <- newMailbox
+      modifyTVar mailboxes $ M.insert name mailbox
+      return mailbox
+    Just mailbox -> return mailbox
+  writeMailbox mailbox message
+
+withTransport :: Transport -> Endpoint -> (Endpoint -> IO ()) -> IO ()
+withTransport transport endpoint actor = do
+  d <- dispatch transport endpoint
+  finally (actor endpoint) $
+    finally (stop d) $
+      shutdown transport
+
+withEndpoint :: Transport -> (Endpoint -> IO ()) -> IO ()
+withEndpoint transport actor = do
+    endpoint <- newEndpoint
+    withTransport transport endpoint actor
+
+withEndpoint2 :: Transport -> (Endpoint -> Endpoint -> IO ()) -> IO ()
+withEndpoint2 transport fn =
+  withEndpoint transport $ \endpoint1 ->
+    withEndpoint transport $ \endpoint2 -> fn endpoint1 endpoint2
+
+withEndpoint3 :: Transport -> (Endpoint -> Endpoint -> Endpoint -> IO () ) -> IO ()
+withEndpoint3 transport fn =
+  withEndpoint transport $ \endpoint1 ->
+    withEndpoint transport $ \endpoint2 ->
+      withEndpoint transport $ \endpoint3 -> fn endpoint1 endpoint2 endpoint3
+
+withEndpoint4 :: Transport -> (Endpoint -> Endpoint -> Endpoint -> Endpoint -> IO () ) -> IO ()
+withEndpoint4 transport fn =
+  withEndpoint2 transport $ \endpoint1 endpoint2 ->
+    withEndpoint2 transport $ \endpoint3 endpoint4 -> fn endpoint1 endpoint2 endpoint3 endpoint4
 
 {-|
-Name for uniquely identifying an 'Endpoint'; suitable for identifying
-the target destination for a 'Message'.
-
--}
-type Name = String
-
-{-|
-An 'Envelope' is a container for a 'Message' with the 'Address' of the 'Message''s destination.
-
--}
-data Envelope = Envelope {
-  envelopeDestination :: Name,
-  envelopeContents :: Message
-  } deriving (Eq,Show,Generic)
-
-instance Serialize Envelope
-
-{-|
-A 'Mailbox' is a place where transports can put messages for 'Network.Endpoint.Endpoint's
-to receive.  Typically 'Network.Endpoint.Endpoint's will use the same 'Mailbox' when
-binding or connecting with a 'Transport'.
--}
-
-{-|
-An address is a logical identifier suitable for establishing a connection to
-another 'Endpoint' over a 'Transport'. It's use (if at all) is specific to the 'Transport'
-in question.
--}
-type Address = String
-
-{-|
-A scheme is an identifier for a discrete type of transport.
--}
-type Scheme = String
-
-{-|
-Bindings are a site for receiving messages on a particular 'Address'
+Bindings are a site for receiving messages on a particular 'Name'
 through a 'Transport'.
 -}
 data Binding = Binding {
@@ -107,36 +176,70 @@ data Binding = Binding {
   unbind :: IO ()
   }
 
-{-|
-A 'Transport' defines a specific method for establishing connections
-between 'Endpoint's.
--}
-data Transport = Transport {
-  scheme :: String,
-  handles :: Name -> IO Bool,
-  bind :: Mailbox Message -> Name -> IO (Either String Binding),
-  sendTo :: Name -> Message -> IO (),
-  shutdown :: IO ()
-  }
+withBinding :: Transport -> Endpoint -> Name -> IO () -> IO ()
+withBinding transport endpoint name actor = do
+  atomically $ do
+    bindings <- readTVar $ boundEndpointNames endpoint
+    if S.member name bindings
+      then throw $ BindingExists name
+      else modifyTVar (boundEndpointNames endpoint) $ S.insert name
+  binding <- bind transport endpoint name
+  finally actor $ do
+    unbind binding
+    atomically $ modifyTVar (boundEndpointNames endpoint) $ S.delete name
 
-{-|
-A 'Resolver' translates a name into an 'Address', if possible. 
-'Transport's may find resolvers useful for determing
-where to reach a specific 'Endpoint', given it''s 'Name'.
--}
-newtype Resolver = Resolver (Name -> IO (Maybe Address))
+withBinding2 :: Transport -> (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
+withBinding2 transport (endpoint1,name1) (endpoint2,name2) fn =
+  withBinding transport endpoint1 name1 $
+    withBinding transport endpoint2 name2 fn
 
-{-|
-Ask the 'Resolver' to find one or more 'Address'es for the provided
-'Name', if any are available from this resolver.
+withBinding3 :: Transport -> (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
+withBinding3 transport (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) fn =
+  withBinding transport endpoint1 name1 $
+    withBinding transport endpoint2 name2 $
+      withBinding transport endpoint3 name3 fn
 
--}
-resolve :: Resolver -> Name -> IO (Maybe Address)
-resolve (Resolver resolver) name = resolver name
+withBinding4 :: Transport -> (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
+withBinding4 transport (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) (endpoint4,name4) fn =
+  withBinding transport endpoint1 name1 $
+    withBinding transport endpoint2 name2 $
+      withBinding transport endpoint3 name3 $
+        withBinding transport endpoint4 name4 fn
 
-{-|
-A simple 'Resolver' that accepts an association list of 'Name's to 'Address'es
-and returns the addresses associated with a given name in the list.
+{-
+Connections are pathways for sending messages to an 'Endpoint' bound to a specific 'Name'
 -}
-resolverFromList :: [(Name,Address)] -> Resolver
-resolverFromList addresses = Resolver (\name -> return $ lookup name addresses)
+data Connection = Connection {
+  disconnect :: IO ()
+}
+
+data ConnectException =
+  ConnectionExists Name |
+  ConnectionDoesNotExist Name |
+  ConnectionHasNoBoundPeer Name
+  deriving (Show,Typeable)
+
+instance Exception ConnectException
+
+withConnection :: Transport -> Endpoint -> Name -> IO () -> IO ()
+withConnection transport endpoint name actor = do
+  connection <- connect transport endpoint name
+  finally actor $ disconnect connection
+
+withConnection2 :: Transport -> Endpoint -> Name -> Name -> IO () -> IO ()
+withConnection2 transport endpoint name1 name2 communicator =
+  withConnection transport endpoint name1 $
+    withConnection transport endpoint name2 communicator
+
+withConnection3 :: Transport -> Endpoint -> Name -> Name -> Name -> IO () -> IO ()
+withConnection3 transport endpoint name1 name2 name3 communicator =
+  withConnection transport endpoint name1 $
+    withConnection transport endpoint name2 $
+      withConnection transport endpoint name3 communicator
+
+withConnection4 :: Transport -> Endpoint -> Name -> Name -> Name -> Name -> IO () -> IO ()
+withConnection4 transport endpoint name1 name2 name3 name4 communicator =
+  withConnection transport endpoint name1 $
+    withConnection transport endpoint name2 $
+      withConnection transport endpoint name3 $
+        withConnection transport endpoint name4 communicator
