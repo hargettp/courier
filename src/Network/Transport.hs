@@ -45,10 +45,7 @@ module Network.Transport (
   withEndpoint3,
   withEndpoint4,
 
-  withName,
-
   Binding(..),
-  BindException(..),
   withBinding,
   withBinding2,
   withBinding3,
@@ -142,14 +139,17 @@ dispatchMessage mailboxes name message = do
     Just mailbox -> return mailbox
   writeMailbox mailbox message
 
+withTransport :: Transport -> Endpoint -> (Endpoint -> IO ()) -> IO ()
+withTransport transport endpoint actor = do
+  d <- dispatch transport endpoint
+  finally (actor endpoint) $
+    finally (stop d) $
+      shutdown transport
 
 withEndpoint :: Transport -> (Endpoint -> IO ()) -> IO ()
 withEndpoint transport actor = do
     endpoint <- newEndpoint
-    d <- dispatch transport endpoint
-    finally (actor endpoint) $
-      finally (stop d) $
-        shutdown transport
+    withTransport transport endpoint actor
 
 withEndpoint2 :: Transport -> (Endpoint -> Endpoint -> IO ()) -> IO ()
 withEndpoint2 transport fn =
@@ -167,11 +167,6 @@ withEndpoint4 transport fn =
   withEndpoint2 transport $ \endpoint1 endpoint2 ->
     withEndpoint2 transport $ \endpoint3 endpoint4 -> fn endpoint1 endpoint2 endpoint3 endpoint4
 
-withName :: Endpoint -> Name -> IO () -> IO ()
-withName endpoint origin actor = do
-  atomically $ setName endpoint origin
-  finally actor $ atomically $ clearName endpoint origin
-
 {-|
 Bindings are a site for receiving messages on a particular 'Name'
 through a 'Transport'.
@@ -180,13 +175,6 @@ data Binding = Binding {
   bindingName :: Name,
   unbind :: IO ()
   }
-
-data BindException =
-  BindingExists Name |
-  BindingDoesNotExist Name
-  deriving (Show,Typeable)
-
-instance Exception BindException
 
 withBinding :: Transport -> Endpoint -> Name -> IO () -> IO ()
 withBinding transport endpoint name actor = do

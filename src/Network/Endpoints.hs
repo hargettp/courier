@@ -30,8 +30,11 @@ module Network.Endpoints (
   -- * Primary API
   Endpoint(..),
   newEndpoint,
-  setName,
-  clearName,
+
+  withName,
+  bindName,
+  unbindName,
+  BindException(..),
 
   sendMessage,
   broadcastMessage,
@@ -61,10 +64,12 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.Mailbox
 import Control.Concurrent.STM
+import Control.Exception
 
 import qualified Data.ByteString as B
 import Data.Serialize
 import qualified Data.Set as S
+import Data.Typeable
 
 import GHC.Generics
 
@@ -161,11 +166,27 @@ newEndpoint = atomically $ do
     boundEndpointNames = names
     }
 
-setName :: Endpoint -> Name -> STM ()
-setName endpoint name = modifyTVar (boundEndpointNames endpoint) $ S.insert name
+withName :: Endpoint -> Name -> IO () -> IO ()
+withName endpoint origin actor = do
+  atomically $ bindName endpoint origin
+  finally actor $ atomically $ unbindName endpoint origin
 
-clearName :: Endpoint -> Name -> STM ()
-clearName endpoint name = modifyTVar (boundEndpointNames endpoint) $ S.delete name
+bindName :: Endpoint -> Name -> STM ()
+bindName endpoint name = do
+  bindings <- readTVar $ boundEndpointNames endpoint
+  if S.member name bindings
+    then throw $ BindingExists name
+    else modifyTVar (boundEndpointNames endpoint) $ S.insert name
+
+unbindName :: Endpoint -> Name -> STM ()
+unbindName endpoint name = modifyTVar (boundEndpointNames endpoint) $ S.delete name
+
+data BindException =
+  BindingExists Name |
+  BindingDoesNotExist Name
+  deriving (Show,Typeable)
+
+instance Exception BindException
 
 {-|
 Send a 'Message' to specific 'Name' via the indicated 'Endpoint'.
