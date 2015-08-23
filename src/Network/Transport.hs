@@ -11,8 +11,8 @@
 -- Portability :  non-portable (requires STM)
 --
 -- A 'Transport' abstracts the details of message delivery, and defines the interfaces
--- that specific 'Transport' implementations should provide in order to deliver messages
--- for 'Endpoint's.
+-- that specific 'Transport' implementations should provide in order to move messages
+-- between 'Endpoint's.
 --
 -- The definition of a transport is deliberately low-level in nature.  Unless a specific
 -- transport describes itself as supporting features like guaranteed delivery, applications
@@ -25,6 +25,19 @@
 -- However, many application may find it easier to push features such as reliable
 -- message delivery into a custom transport, leaving the application only having
 -- to concern itself with the messages being delivered rather than how they arrive.
+--
+-- The main abstractions common to all transports:
+--
+-- * 'Endpoint's may not receive messages until either 'bind' has been called on an available
+-- 'Transport', or a 'bindName' has been called on the 'Endpoint'. The latter is typically useful
+-- for 'Endpoint's that originate connections but do not accept them directly.
+-- * A 'Connection' defines a bi-directional pathway for messages to flow between 'Endpoint's. The initiator
+-- of the connection is a client, and the destination for the connection is a server. Server 'Endpoint's
+-- may have to have called 'bind' on the 'Transport' before being able to accept connections or receive messages;
+-- a client only has to have called 'bindName' in order to receive responses from the server.
+-- * Client's proactively attempt to maintain 'Connection's to the server; in the event a server breaks the connection
+-- (other because of a crash or deliberate exit), the client will continue to restore the connection.
+-- * 'Connection's essentially define the topology over which messages will propagate between 'Endpoint's.
 --
 -----------------------------------------------------------------------------
 module Network.Transport (
@@ -39,6 +52,8 @@ module Network.Transport (
   Mailboxes,
   pullMessage,
   dispatchMessage,
+
+  withTransport,
 
   withEndpoint,
   withEndpoint2,
@@ -93,6 +108,9 @@ data Dispatcher = Dispatcher {
   stop :: IO ()
 }
 
+{-|
+An exception encountered by a 'Transport'.
+-}
 data TransportException =
   NoDataRead |
   DataUnderflow
@@ -100,6 +118,10 @@ data TransportException =
 
 instance Exception TransportException
 
+{-|
+Wraps in a continually repeating call to 'dispatchMessage' in a 'Dispatcher' so that dispatching
+can be stopped when no longer needed.
+-}
 dispatcher :: Mailboxes -> Endpoint -> IO Dispatcher
 dispatcher mailboxes endpoint = do
   d <- async disp
@@ -115,6 +137,9 @@ dispatcher mailboxes endpoint = do
         dispatchMessage mailboxes name msg
       disp
 
+{-|
+A mutable 'Map' of 'Name's to 'Mailbox'es of 'Message's.
+-}
 type Mailboxes = TVar (M.Map Name (Mailbox Message))
 
 {-
@@ -128,6 +153,12 @@ pullMessage mailboxes destination = do
     Nothing -> retry
     Just mailbox -> readMailbox mailbox
 
+{-|
+A simple function to multiplex messages (each wrapped in an 'Envelope') in the 'endpointOutbound'
+mailbox of an 'Endpoint' to one or more 'Mailboxes' by extract the 'messageDestination' from the 'Envelope' and
+finding or creating a 'Mailbox' containing messages only for that destination. This is often useful for 'Transport's,
+who then only have to monitor a specific 'Mailbox' to know when there are messages to send to a particular destination.
+-}
 dispatchMessage :: Mailboxes -> Name -> Message -> STM ()
 dispatchMessage mailboxes name message = do
   outbound <- readTVar mailboxes
@@ -139,17 +170,20 @@ dispatchMessage mailboxes name message = do
     Just mailbox -> return mailbox
   writeMailbox mailbox message
 
-withTransport :: Transport -> Endpoint -> (Endpoint -> IO ()) -> IO ()
+{-|
+Within the body of the function, ensures that 'Message's are dispatched as necessary.
+-}
+withTransport :: Transport -> Endpoint -> IO () -> IO ()
 withTransport transport endpoint actor = do
   d <- dispatch transport endpoint
-  finally (actor endpoint) $
+  finally actor $
     finally (stop d) $
       shutdown transport
 
 withEndpoint :: Transport -> (Endpoint -> IO ()) -> IO ()
 withEndpoint transport actor = do
     endpoint <- newEndpoint
-    withTransport transport endpoint actor
+    withTransport transport endpoint (actor endpoint)
 
 withEndpoint2 :: Transport -> (Endpoint -> Endpoint -> IO ()) -> IO ()
 withEndpoint2 transport fn =

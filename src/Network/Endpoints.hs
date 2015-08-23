@@ -17,7 +17,7 @@
 -- whether on the same physical host or distributed over a network. 'Endpoint's are intended
 -- to simplify the development of network-centric applications by providing a small transport-independent
 -- message-passing interface, and application writers can independently alter their implementation
--- by enabling their 'Endpoint's with different 'Transport's without modifying the logic of their
+-- by enabling their 'Endpoint's with different 'Network.Transport's without modifying the logic of their
 -- application that sends / receives 'Message's.
 --
 -----------------------------------------------------------------------------
@@ -52,7 +52,6 @@ module Network.Endpoints (
   Envelope(..),
   Message,
   Name(..),
-  Names,
 
   ) where
 
@@ -83,37 +82,47 @@ _log = "transport.endpoints"
 --
 -- A sample of how to use this library:
 --
--- > module HelloWorld (
--- >     main
--- > ) where
+-- > module Main where
 -- >
--- > -- Just import this package to access the primary APIs
+-- >  -- Import this package to manage endpoints
 -- > import Network.Endpoints
 -- >
--- > -- A specific transport is necessary, however
--- > import Network.Transport.TCP
+-- >  -- A specific transport is necessary, however
+-- > import Network.Transport.Sockets.TCP
 -- >
 -- > -- Needed for serialization
 -- > import Data.Serialize
 -- >
 -- > main :: IO ()
 -- > main = do
--- >    let name1 = "endpoint1"
--- >        name2 = "endpoint2"
--- >        resolver = resolverFromList [(name1,"localhost:2000"),
--- >                                (name2,"localhost:2001")]
--- >    transport <- newTCPTransport resolver
--- >    endpoint1 <- newEndpoint [transport]
--- >    endpoint2 <- newEndpoint [transport]
--- >    Right () <- bindEndpoint endpoint1 name1
--- >    Right () <- bindEndpoint endpoint2 name2
--- >    sendMessage_ endpoint1 name2 $ encode "hello world!"
--- >    msg <- receiveMessage endpoint2
--- >    let Right txt = decode msg
--- >        in print (txt :: String)
--- >    Right () <- unbindEndpoint endpoint1 name1
--- >    Right () <- unbindEndpoint endpoint2 name2
--- >    shutdown transport
+-- >   -- each endpoint needs a name; since we're using TCP/IP
+-- >   -- as our transport, they need to be host/port pairs
+-- >   let name1 = Name "localhost:9001"
+-- >       name2 = Name "localhost:9002"
+-- >       -- the default resolvers just pull apart a name into separate
+-- >       -- host and port components; more elaborate resolvers could
+-- >       -- perform name lookups or other translations
+-- >       resolver = tcpSocketResolver4
+-- >   -- we need endpoints for each end of the communication
+-- >   endpoint1 <- newEndpoint
+-- >   endpoint2 <- newEndpoint
+-- >   -- we need a transport to move messages between endpoints
+-- >   transport <- newTCPTransport4 resolver
+-- >   withTransport transport endpoint1 $
+-- >     withTransport transport endpoint2 $
+-- >     -- the first endpoint is just a client, so it needs a name to receive
+-- >     -- responses, but does not need a binding since it isn't accept connections
+-- >       withName endpoint1 name1 $
+-- >         -- the second endpoint is a server, so it needs a binding
+-- >         withBinding transport endpoint2 name2 $
+-- >           -- a connection between the first endpoint and the name of the second
+-- >           -- creates a bi-directional path for messages to flow between the endpoints
+-- >           withConnection transport endpoint1 name2 $ do
+-- >             sendMessage endpoint1 name2 $ encode "hello world!"
+-- >             msg <- receiveMessage endpoint2
+-- >             let Right txt = decode msg
+-- >                 in print (txt :: String)
+-- >
 
 {-|
 Endpoints are a locus of communication, used for sending and receive messages.
@@ -125,7 +134,7 @@ data Endpoint = Endpoint {
   endpointInbound :: Mailbox Message,
   endpointOutbound :: Mailbox Envelope,
   -- | The 'Name's to which the 'Endpoint' is bound
-  boundEndpointNames :: Names
+  boundEndpointNames :: TVar (S.Set Name )
   }
 
 {-|
@@ -135,16 +144,17 @@ type Message = B.ByteString
 
 {-|
 Name for uniquely identifying an 'Endpoint'; suitable for identifying
-the target destination for a 'Message'.
-
+the target destination for a 'Message'. The specific interpretation of a name
+is left to each 'Network.Transport.Transport'
 -}
 newtype Name = Name String deriving (Eq,Ord,Show,Generic)
 
 instance Serialize Name
 
-type Names = TVar (S.Set Name )
-
-{- An 'Envelope' wraps a 'Message' with the 'Name's of the sender and receive -}
+{-|
+ An 'Envelope' wraps a 'Message' with the 'Name's of the destination for the message and (optionally)
+the origin.
+-}
 
 data Envelope = Envelope {
   messageOrigin :: Maybe Name,
@@ -166,11 +176,21 @@ newEndpoint = atomically $ do
     boundEndpointNames = names
     }
 
+{-|
+Declare an 'Endpoint' as having the specified 'Name' while the supplied function executes. This can
+often be useful for establishing the 'Name' of a client or initiator of a 'Network.Transport.Connection',
+without requiring the client also have a 'Network.Transport.Binding'.
+
+-}
 withName :: Endpoint -> Name -> IO () -> IO ()
 withName endpoint origin actor = do
   atomically $ bindName endpoint origin
   finally actor $ atomically $ unbindName endpoint origin
 
+{-|
+Establish 'Name' as one of the 'boundEndpointNames' for an 'Endpoint'. Throws 'BindingExists' if
+the 'Endpoint' is already bound to the 'Name'.
+-}
 bindName :: Endpoint -> Name -> STM ()
 bindName endpoint name = do
   bindings <- readTVar $ boundEndpointNames endpoint
@@ -178,9 +198,19 @@ bindName endpoint name = do
     then throw $ BindingExists name
     else modifyTVar (boundEndpointNames endpoint) $ S.insert name
 
+{-|
+Remove 'Name' as one of the 'boundEndpointNames' for an 'Endpoint'. Throws 'BindingDoesNotExist'
+if the 'Endpoint' is not bound to the 'Name'.
+-}
 unbindName :: Endpoint -> Name -> STM ()
-unbindName endpoint name = modifyTVar (boundEndpointNames endpoint) $ S.delete name
+unbindName endpoint name = modifyTVar (boundEndpointNames endpoint) $ \bindings -> do
+  case S.member name bindings of
+    False -> throw $ BindingDoesNotExist name
+    True -> S.delete name bindings
 
+{-|
+Exceptions generated when `Network.Transport.bind`ing a 'Name'.
+-}
 data BindException =
   BindingExists Name |
   BindingDoesNotExist Name

@@ -1,33 +1,40 @@
-module HelloWorld (
-    main
-) where
+module Main where
 
- -- Just import this package to access the primary APIs
--- import Network.Endpoints
+ -- Import this package to manage endpoints
+import Network.Endpoints
 
  -- A specific transport is necessary, however
--- import Network.Transport.TCP
+import Network.Transport.Sockets.TCP
 
 -- Needed for serialization
--- import Data.Serialize
+import Data.Serialize
 
 main :: IO ()
-main = return ()
-{-
-    let name1 = Name "endpoint1"
-        name2 = Name "endpoint2"
-        resolver = resolverFromList [(name1,"localhost:2000"),
-                                (name2,"localhost:2001")]
-    transport <- newTCPTransport resolver
-    endpoint1 <- newEndpoint transport
-    endpoint2 <- newEndpoint transport
-    Right () <- bindEndpoint endpoint1 name1
-    Right () <- bindEndpoint endpoint2 name2
-    sendMessage_ endpoint1 name2 $ encode "hello world!"
-    msg <- receiveMessage endpoint2
-    let Right txt = decode msg
-        in print (txt :: String)
-    Right () <- unbindEndpoint endpoint1 name1
-    Right () <- unbindEndpoint endpoint2 name2
-    shutdown transport
--}
+main = do
+  -- each endpoint needs a name; since we're using TCP
+  -- as our transport, they need to be host/port pairs
+  let name1 = Name "localhost:9001"
+      name2 = Name "localhost:9002"
+      -- the default resolvers just pull apart a name into separate
+      -- host and port components; more elaborate resolvers could
+      -- perform name lookups or other translations
+      resolver = tcpSocketResolver4
+  -- we need endpoints for each end of the communication
+  endpoint1 <- newEndpoint
+  endpoint2 <- newEndpoint
+  -- we need a transport to move messages between endpoints
+  transport <- newTCPTransport4 resolver
+  withTransport transport endpoint1 $
+    withTransport transport endpoint2 $
+    -- the first endpoint is just a client, so it needs a name to receive
+    -- responses, but does not need a binding since it isn't accept connections
+      withName endpoint1 name1 $
+        -- the second endpoint is a server, so it needs a binding
+        withBinding transport endpoint2 name2 $
+          -- a connection between the first endpoint and the name of the second
+          -- creates a bi-directional path for messages to flow between the endpoints
+          withConnection transport endpoint1 name2 $ do
+            sendMessage endpoint1 name2 $ encode "hello world!"
+            msg <- receiveMessage endpoint2
+            let Right txt = decode msg
+                in print (txt :: String)
