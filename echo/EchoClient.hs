@@ -38,5 +38,5 @@ echo endpoint server client = do
   case decode response of
     Left _ -> error "Could not decode message"
     Right responseText -> do
-      hPutStrLn stdout responseText
+      hPutStrLn stdout $ "> " ++ responseText
       echo endpoint server client
