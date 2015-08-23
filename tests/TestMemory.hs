@@ -26,6 +26,8 @@ tests = [
     "mem"
     (Name "name1")
     (Name "name2")
+    (Name "name3")
+    (Name "name4")
 
 testEndpointTransport :: Assertion
 testEndpointTransport = do

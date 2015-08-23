@@ -29,6 +29,8 @@ tests4 = [
     "udp4"
     (Name "localhost:9001")
     (Name "localhost:9002")
+    (Name "localhost:9003")
+    (Name "localhost:9004")
 
 tests6 :: [Test.Framework.Test]
 tests6 = transportTestSuite
@@ -36,6 +38,8 @@ tests6 = transportTestSuite
   "udp6"
   (Name "localhost:9001")
   (Name "localhost:9002")
+  (Name "localhost:9003")
+  (Name "localhost:9004")
 
 testEndpointTransport :: Assertion
 testEndpointTransport = do
