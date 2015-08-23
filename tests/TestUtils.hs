@@ -1,13 +1,19 @@
 module TestUtils
     (
-      newTCPAddress
-    , newUDPAddress
-    , newTCPAddress6
-    , newUDPAddress6
-    , timeBound
-    , troubleshoot
+    withNewEndpoint,
+    withNewEndpoint2,
+    withNewEndpoint3,
+    withNewEndpoint4,
 
-    ,isIPv6Available
+    newTCPAddress,
+    newUDPAddress,
+    newTCPAddress6,
+    newUDPAddress6,
+    isIPv6Available,
+
+    timeBound,
+    troubleshoot,
+
     )
   where
 
@@ -29,6 +35,27 @@ import Test.HUnit
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
+
+withNewEndpoint :: Transport -> (Endpoint -> IO ()) -> IO ()
+withNewEndpoint transport fn = do
+  endpoint <- newEndpoint
+  withEndpoint transport endpoint $ fn endpoint
+
+withNewEndpoint2 :: Transport -> (Endpoint -> Endpoint -> IO ()) -> IO ()
+withNewEndpoint2 transport fn = do
+  withNewEndpoint transport $ \endpoint1 ->
+    withNewEndpoint transport $ \endpoint2 ->
+      fn endpoint1 endpoint2
+
+withNewEndpoint3 :: Transport -> (Endpoint -> Endpoint -> Endpoint -> IO ()) -> IO ()
+withNewEndpoint3 transport fn = withNewEndpoint transport $ \endpoint1 ->
+  withNewEndpoint2 transport $ \endpoint2 endpoint3 ->
+    fn endpoint1 endpoint2 endpoint3
+
+withNewEndpoint4 :: Transport -> (Endpoint -> Endpoint -> Endpoint -> Endpoint -> IO ()) -> IO ()
+withNewEndpoint4 transport fn = withNewEndpoint2 transport $ \endpoint1 endpoint2 ->
+  withNewEndpoint2 transport $ \endpoint3 endpoint4 ->
+    fn endpoint1 endpoint2 endpoint3 endpoint4
 
 newTCPAddress :: IO Name
 newTCPAddress = do

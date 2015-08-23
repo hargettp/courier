@@ -12,8 +12,6 @@ import TransportTestSuite
 -- external imports
 
 import Test.Framework
-import Test.HUnit
-import Test.Framework.Providers.HUnit
 
 -----------------------------------------------------------------------------
 -----------------------------------------------------------------------------
@@ -24,11 +22,7 @@ tests4 = do
   name2 <- newTCPAddress
   name3 <- newTCPAddress
   name4 <- newTCPAddress
-  return $ [
-      testCase "tcp-endpoints+transport" testEndpointTransport,
-      testCase "tcp-transport" testTCPTransport
-    ]
-    ++ transportTestSuite
+  return $ transportTestSuite
       (newTCPTransport4 tcpSocketResolver4)
       "tcp4"
       name1
@@ -50,17 +44,6 @@ tests6 = do
     name3
     name4
 
-testEndpointTransport :: Assertion
-testEndpointTransport = do
-  transport <- newTCPTransport4 tcpSocketResolver4
-  withEndpoint transport $ \_ -> return ()
 
 _log :: String
 _log = "_test_TCP"
-
--- TCP tests
-
-testTCPTransport :: Assertion
-testTCPTransport = do
-    transport <- newTCPTransport4 tcpSocketResolver4
-    shutdown transport

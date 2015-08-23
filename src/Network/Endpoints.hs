@@ -95,7 +95,7 @@ _log = "transport.endpoints"
 -- >
 -- > main :: IO ()
 -- > main = do
--- >   -- each endpoint needs a name; since we're using TCP/IP
+-- >   -- each endpoint needs a name; since we're using TCP
 -- >   -- as our transport, they need to be host/port pairs
 -- >   let name1 = Name "localhost:9001"
 -- >       name2 = Name "localhost:9002"
@@ -107,22 +107,23 @@ _log = "transport.endpoints"
 -- >   endpoint1 <- newEndpoint
 -- >   endpoint2 <- newEndpoint
 -- >   -- we need a transport to move messages between endpoints
--- >   transport <- newTCPTransport4 resolver
--- >   withTransport transport endpoint1 $
--- >     withTransport transport endpoint2 $
--- >     -- the first endpoint is just a client, so it needs a name to receive
--- >     -- responses, but does not need a binding since it isn't accept connections
--- >       withName endpoint1 name1 $
--- >         -- the second endpoint is a server, so it needs a binding
--- >         withBinding transport endpoint2 name2 $
--- >           -- a connection between the first endpoint and the name of the second
--- >           -- creates a bi-directional path for messages to flow between the endpoints
--- >           withConnection transport endpoint1 name2 $ do
--- >             sendMessage endpoint1 name2 $ encode "hello world!"
--- >             msg <- receiveMessage endpoint2
--- >             let Right txt = decode msg
--- >                 in print (txt :: String)
+-- >   withTransport (newTCPTransport4 resolver) $ \transport ->
+-- >     withEndpoint transport endpoint1 $
+-- >       withEndpoint transport endpoint2 $
+-- >       -- the first endpoint is just a client, so it needs a name to receive
+-- >       -- responses, but does not need a binding since it isn't accept connections
+-- >         withName endpoint1 name1 $
+-- >           -- the second endpoint is a server, so it needs a binding
+-- >           withBinding transport endpoint2 name2 $
+-- >             -- a connection between the first endpoint and the name of the second
+-- >             -- creates a bi-directional path for messages to flow between the endpoints
+-- >             withConnection transport endpoint1 name2 $ do
+-- >               sendMessage endpoint1 name2 $ encode "hello world!"
+-- >               msg <- receiveMessage endpoint2
+-- >               let Right txt = decode msg
+-- >                   in print (txt :: String)
 -- >
+--
 
 {-|
 Endpoints are a locus of communication, used for sending and receive messages.

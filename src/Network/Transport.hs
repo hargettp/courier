@@ -56,9 +56,6 @@ module Network.Transport (
   withTransport,
 
   withEndpoint,
-  withEndpoint2,
-  withEndpoint3,
-  withEndpoint4,
 
   Binding(..),
   withBinding,
@@ -67,7 +64,6 @@ module Network.Transport (
   withBinding4,
 
   Connection(..),
-  ConnectException(..),
   withConnection,
   withConnection2,
   withConnection3,
@@ -104,6 +100,9 @@ data Transport = Transport {
   shutdown :: IO ()
   }
 
+{-|
+A 'Dispatcher' encapsulates a 'Transport's interaction with an 'Endpoint' for outbound message flow.
+-}
 data Dispatcher = Dispatcher {
   stop :: IO ()
 }
@@ -142,7 +141,7 @@ A mutable 'Map' of 'Name's to 'Mailbox'es of 'Message's.
 -}
 type Mailboxes = TVar (M.Map Name (Mailbox Message))
 
-{-
+{-|
 Pull a 'Message' intended for a destination name from a 'Mailboxes' directly,
 without the use of a 'Transport'
 -}
@@ -173,33 +172,21 @@ dispatchMessage mailboxes name message = do
 {-|
 Within the body of the function, ensures that 'Message's are dispatched as necessary.
 -}
-withTransport :: Transport -> Endpoint -> IO () -> IO ()
-withTransport transport endpoint actor = do
+withTransport :: IO Transport -> (Transport -> IO ()) -> IO ()
+withTransport factory fn = do
+  transport <- factory
+  finally (fn transport)
+   (shutdown transport)
+
+{-|
+Within the body of the function, ensure that there is a 'Dispatcher' for the 'Endpoint'.
+
+-}
+withEndpoint :: Transport -> Endpoint -> IO ()  -> IO ()
+withEndpoint transport endpoint fn = do
   d <- dispatch transport endpoint
-  finally actor $
-    finally (stop d) $
-      shutdown transport
-
-withEndpoint :: Transport -> (Endpoint -> IO ()) -> IO ()
-withEndpoint transport actor = do
-    endpoint <- newEndpoint
-    withTransport transport endpoint (actor endpoint)
-
-withEndpoint2 :: Transport -> (Endpoint -> Endpoint -> IO ()) -> IO ()
-withEndpoint2 transport fn =
-  withEndpoint transport $ \endpoint1 ->
-    withEndpoint transport $ \endpoint2 -> fn endpoint1 endpoint2
-
-withEndpoint3 :: Transport -> (Endpoint -> Endpoint -> Endpoint -> IO () ) -> IO ()
-withEndpoint3 transport fn =
-  withEndpoint transport $ \endpoint1 ->
-    withEndpoint transport $ \endpoint2 ->
-      withEndpoint transport $ \endpoint3 -> fn endpoint1 endpoint2 endpoint3
-
-withEndpoint4 :: Transport -> (Endpoint -> Endpoint -> Endpoint -> Endpoint -> IO () ) -> IO ()
-withEndpoint4 transport fn =
-  withEndpoint2 transport $ \endpoint1 endpoint2 ->
-    withEndpoint2 transport $ \endpoint3 endpoint4 -> fn endpoint1 endpoint2 endpoint3 endpoint4
+  finally fn
+    (stop d)
 
 {-|
 Bindings are a site for receiving messages on a particular 'Name'
@@ -210,6 +197,11 @@ data Binding = Binding {
   unbind :: IO ()
   }
 
+{-|
+A helper for ensuring there is a 'Binding' of a specific 'Endpoint' to a specific 'Name'
+on the provided 'Transport' during a function.
+
+-}
 withBinding :: Transport -> Endpoint -> Name -> IO () -> IO ()
 withBinding transport endpoint name actor = do
   atomically $ do
@@ -222,17 +214,29 @@ withBinding transport endpoint name actor = do
     unbind binding
     atomically $ modifyTVar (boundEndpointNames endpoint) $ S.delete name
 
+{-|
+A helper for ensuring there are 'Binding's of a specific 'Endpoint' to specific 'Name's
+on the provided 'Transport' during a function.
+-}
 withBinding2 :: Transport -> (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
 withBinding2 transport (endpoint1,name1) (endpoint2,name2) fn =
   withBinding transport endpoint1 name1 $
     withBinding transport endpoint2 name2 fn
 
+{-|
+A helper for ensuring there are 'Binding's of a specific 'Endpoint' to specific 'Name's
+on the provided 'Transport' during a function.
+-}
 withBinding3 :: Transport -> (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
 withBinding3 transport (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) fn =
   withBinding transport endpoint1 name1 $
     withBinding transport endpoint2 name2 $
       withBinding transport endpoint3 name3 fn
 
+{-|
+A helper for ensuring there are 'Binding's of a specific 'Endpoint' to specific 'Name's
+on the provided 'Transport' during a function.
+-}
 withBinding4 :: Transport -> (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
 withBinding4 transport (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) (endpoint4,name4) fn =
   withBinding transport endpoint1 name1 $
@@ -240,40 +244,45 @@ withBinding4 transport (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) (en
       withBinding transport endpoint3 name3 $
         withBinding transport endpoint4 name4 fn
 
-{-
-Connections are pathways for sending messages to an 'Endpoint' bound to a specific 'Name'
+{-|
+Connections are bi-directional pathways for exchanging 'Message's with another 'Endpoint'
+that is bound to a specific 'Name' on a shared 'Transport'.
 -}
 data Connection = Connection {
   disconnect :: IO ()
 }
 
-data ConnectException =
-  ConnectionExists Name |
-  ConnectionDoesNotExist Name |
-  ConnectionHasNoBoundPeer Name
-  deriving (Show,Typeable)
-
-instance Exception ConnectException
-
+{-|
+A helper for ensuring that a 'Connection' is maintained during execution of a function.
+-}
 withConnection :: Transport -> Endpoint -> Name -> IO () -> IO ()
-withConnection transport endpoint name actor = do
+withConnection transport endpoint name fn = do
   connection <- connect transport endpoint name
-  finally actor $ disconnect connection
+  finally fn $ disconnect connection
 
+{-|
+A helper for ensuring that 2 'Connection's are maintained during execution of a function.
+-}
 withConnection2 :: Transport -> Endpoint -> Name -> Name -> IO () -> IO ()
-withConnection2 transport endpoint name1 name2 communicator =
+withConnection2 transport endpoint name1 name2 fn =
   withConnection transport endpoint name1 $
-    withConnection transport endpoint name2 communicator
+    withConnection transport endpoint name2 fn
 
+{-|
+A helper for ensuring that 3 'Connection's are maintained during execution of a function.
+-}
 withConnection3 :: Transport -> Endpoint -> Name -> Name -> Name -> IO () -> IO ()
-withConnection3 transport endpoint name1 name2 name3 communicator =
+withConnection3 transport endpoint name1 name2 name3 fn =
   withConnection transport endpoint name1 $
     withConnection transport endpoint name2 $
-      withConnection transport endpoint name3 communicator
+      withConnection transport endpoint name3 fn
 
+{-|
+A helper for ensuring that 4 'Connection's are maintained during execution of a function.
+-}
 withConnection4 :: Transport -> Endpoint -> Name -> Name -> Name -> Name -> IO () -> IO ()
-withConnection4 transport endpoint name1 name2 name3 name4 communicator =
+withConnection4 transport endpoint name1 name2 name3 name4 fn =
   withConnection transport endpoint name1 $
     withConnection transport endpoint name2 $
       withConnection transport endpoint name3 $
-        withConnection transport endpoint name4 communicator
+        withConnection transport endpoint name4 fn

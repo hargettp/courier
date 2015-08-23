@@ -21,13 +21,14 @@ main :: IO ()
 main = do
   let server = Name "localhost:9001"
       client = Name "localhost:9002"
-  transport <- newTCPTransport4 tcpSocketResolver4
-  withEndpoint transport $ \endpoint ->
-    withName endpoint client $
-      withConnection transport endpoint server $ do
-        hPutStrLn stdout "Started echo client"
-        finally (echo endpoint server client)
-          (hPutStrLn stdout "\nStopped echo client")
+  endpoint <- newEndpoint
+  withTransport (newTCPTransport4 tcpSocketResolver4) $ \transport ->
+    withEndpoint transport endpoint $
+      withName endpoint client $
+        withConnection transport endpoint server $ do
+          hPutStrLn stdout "Started echo client"
+          finally (echo endpoint server client)
+            (hPutStrLn stdout "\nStopped echo client")
 
 echo :: Endpoint -> Name -> Name -> IO ()
 echo endpoint server client = do

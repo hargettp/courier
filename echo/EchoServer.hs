@@ -20,12 +20,13 @@ import System.IO
 main :: IO ()
 main = do
   let name = Name "localhost:9001"
-  transport <- newTCPTransport4 tcpSocketResolver4
-  withEndpoint transport $ \endpoint ->
-    withBinding transport endpoint name $ do
-      hPutStrLn stdout "Started echo server"
-      finally (echo endpoint name)
-        (hPutStrLn stdout "\nStopped echo server")
+  endpoint <- newEndpoint
+  withTransport (newTCPTransport4 tcpSocketResolver4) $ \transport ->
+    withEndpoint transport endpoint $
+      withBinding transport endpoint name $ do
+        hPutStrLn stdout "Started echo server"
+        finally (echo endpoint name)
+          (hPutStrLn stdout "\nStopped echo server")
 
 echo :: Endpoint -> Name -> IO ()
 echo endpoint name = do
