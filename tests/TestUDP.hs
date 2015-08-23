@@ -5,7 +5,6 @@ module TestUDP (
 
 -- local imports
 
-import Network.Endpoints
 import Network.Transport.Sockets.UDP
 
 import TransportTestSuite
@@ -19,27 +18,37 @@ import Test.Framework.Providers.HUnit
 -----------------------------------------------------------------------------
 -----------------------------------------------------------------------------
 
-tests4 :: [Test.Framework.Test]
-tests4 = [
-    testCase "udp-endpoints+transport" testEndpointTransport,
-    testCase "udp-transport" testUDPTransport
-  ]
-  ++ transportTestSuite
-    (newUDPTransport4 udpSocketResolver4)
-    "udp4"
-    (Name "localhost:9001")
-    (Name "localhost:9002")
-    (Name "localhost:9003")
-    (Name "localhost:9004")
+tests4 :: IO [Test.Framework.Test]
+tests4 = do
+  name1 <- newUDPAddress
+  name2 <- newUDPAddress
+  name3 <- newUDPAddress
+  name4 <- newUDPAddress
+  return $ [
+      testCase "udp-endpoints+transport" testEndpointTransport,
+      testCase "udp-transport" testUDPTransport
+    ]
+    ++ transportTestSuite
+      (newUDPTransport4 udpSocketResolver4)
+      "udp4"
+      name1
+      name2
+      name3
+      name4
 
-tests6 :: [Test.Framework.Test]
-tests6 = transportTestSuite
-  (newUDPTransport6 udpSocketResolver6)
-  "udp6"
-  (Name "localhost:9001")
-  (Name "localhost:9002")
-  (Name "localhost:9003")
-  (Name "localhost:9004")
+tests6 :: IO [Test.Framework.Test]
+tests6 = do
+  name1 <- newUDPAddress6
+  name2 <- newUDPAddress6
+  name3 <- newUDPAddress6
+  name4 <- newUDPAddress6
+  return $ transportTestSuite
+    (newUDPTransport6 udpSocketResolver6)
+    "udp6"
+    name1
+    name2
+    name3
+    name4
 
 testEndpointTransport :: Assertion
 testEndpointTransport = do

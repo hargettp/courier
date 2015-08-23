@@ -28,9 +28,13 @@ main :: IO ()
 main = do
   initLogging
   ipv6 <- isIPv6Available
-  let allTests = tests ++ T.tests4 ++ U.tests4
+  t4 <- T.tests4
+  t6 <- T.tests6
+  u4 <- U.tests4
+  u6 <- U.tests6
+  let allTests = tests ++ t4 ++ u4
   if ipv6
-    then defaultMain (allTests ++ T.tests6 ++ U.tests6)
+    then defaultMain (allTests ++ t6 ++ u6)
     else defaultMain allTests
 
 initLogging :: IO ()

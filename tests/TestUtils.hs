@@ -30,27 +30,27 @@ import Test.HUnit
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
-newTCPAddress :: IO String
+newTCPAddress :: IO Name
 newTCPAddress = do
   NS.SockAddrInet p _ <- availablePort NS.AF_INET NS.Stream
-  return $ "localhost:" ++ show p
+  return $ Name $ "localhost:" ++ show p
 
-newUDPAddress :: IO String
+newUDPAddress :: IO Name
 newUDPAddress = do
   NS.SockAddrInet p _ <- availablePort NS.AF_INET NS.Datagram
-  return $ "localhost:" ++ show p
+  return $ Name $ "localhost:" ++ show p
 
-newTCPAddress6 :: IO String
+newTCPAddress6 :: IO Name
 newTCPAddress6 = do
   NS.SockAddrInet6 p _ _ _ <- availablePort NS.AF_INET6 NS.Stream
-  return $ "localhost:" ++ show p
+  return $ Name $ "localhost:" ++ show p
 
-newUDPAddress6 :: IO String
+newUDPAddress6 :: IO Name
 newUDPAddress6 = do
   NS.SockAddrInet6 p _ _ _ <- availablePort NS.AF_INET6 NS.Datagram
-  return $ "localhost:" ++ show p
+  return $ Name $ "localhost:" ++ show p
 
-availablePort     :: NS.Family -> NS.SocketType -> IO NS.SockAddr
+availablePort :: NS.Family -> NS.SocketType -> IO NS.SockAddr
 availablePort f t = do
   let hints = NS.defaultHints { NS.addrFamily = f
                               , NS.addrSocketType = t
