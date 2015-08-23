@@ -82,6 +82,28 @@ library
                        text,
                        uuid
 
+executable echo-server
+  hs-source-dirs: echo
+  main-is: EchoServer.hs
+  ghc-options:
+    -Wall
+    -fno-state-hack
+    -threaded
+  build-depends:       base >=4.6 && <5,
+                       cereal,
+                       courier
+
+executable echo-client
+  hs-source-dirs: echo
+  main-is: EchoClient.hs
+  ghc-options:
+    -Wall
+    -fno-state-hack
+    -threaded
+  build-depends:      base >=4.6 && <5,
+                      cereal,
+                      courier
+
 Test-Suite test-courier
     type: exitcode-stdio-1.0
     hs-source-dirs: tests

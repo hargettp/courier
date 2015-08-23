@@ -45,6 +45,8 @@ module Network.Transport (
   withEndpoint3,
   withEndpoint4,
 
+  withName,
+
   Binding(..),
   BindException(..),
   withBinding,
@@ -164,6 +166,11 @@ withEndpoint4 :: Transport -> (Endpoint -> Endpoint -> Endpoint -> Endpoint -> I
 withEndpoint4 transport fn =
   withEndpoint2 transport $ \endpoint1 endpoint2 ->
     withEndpoint2 transport $ \endpoint3 endpoint4 -> fn endpoint1 endpoint2 endpoint3 endpoint4
+
+withName :: Endpoint -> Name -> IO () -> IO ()
+withName endpoint origin actor = do
+  atomically $ setName endpoint origin
+  finally actor $ atomically $ clearName endpoint origin
 
 {-|
 Bindings are a site for receiving messages on a particular 'Name'

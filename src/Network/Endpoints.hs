@@ -30,6 +30,8 @@ module Network.Endpoints (
   -- * Primary API
   Endpoint(..),
   newEndpoint,
+  setName,
+  clearName,
 
   sendMessage,
   broadcastMessage,
@@ -158,6 +160,12 @@ newEndpoint = atomically $ do
     endpointOutbound = outbound,
     boundEndpointNames = names
     }
+
+setName :: Endpoint -> Name -> STM ()
+setName endpoint name = modifyTVar (boundEndpointNames endpoint) $ S.insert name
+
+clearName :: Endpoint -> Name -> STM ()
+clearName endpoint name = modifyTVar (boundEndpointNames endpoint) $ S.delete name
 
 {-|
 Send a 'Message' to specific 'Name' via the indicated 'Endpoint'.
