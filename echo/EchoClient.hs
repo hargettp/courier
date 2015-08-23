@@ -12,6 +12,7 @@ import Control.Exception
 
 import Data.Serialize
 
+import System.Environment
 import System.IO
 
 -----------------------------------------------------------------------------
@@ -19,16 +20,17 @@ import System.IO
 
 main :: IO ()
 main = do
-  let server = Name "localhost:9001"
-      client = Name "localhost:9002"
+  [serverNameStr,clientNameStr] <- getArgs
+  let server = Name serverNameStr
+      client = Name clientNameStr
   endpoint <- newEndpoint
   withTransport (newTCPTransport4 tcpSocketResolver4) $ \transport ->
     withEndpoint transport endpoint $
       withName endpoint client $
         withConnection transport endpoint server $ do
-          hPutStrLn stdout "Started echo client"
+          hPutStrLn stdout $ "Started echo client on " ++ (show client) ++ " for " ++ (show server)
           finally (echo endpoint server client)
-            (hPutStrLn stdout "\nStopped echo client")
+            (hPutStrLn stdout $ "\nStopped echo client on " ++ (show client) ++ " for " ++ (show server))
 
 echo :: Endpoint -> Name -> Name -> IO ()
 echo endpoint server client = do

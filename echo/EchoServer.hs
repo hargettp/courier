@@ -12,6 +12,7 @@ import Control.Exception
 
 import Data.Serialize
 
+import System.Environment
 import System.IO
 
 -----------------------------------------------------------------------------
@@ -19,21 +20,22 @@ import System.IO
 
 main :: IO ()
 main = do
-  let name = Name "localhost:9001"
+  [nameStr] <- getArgs
+  let server = Name nameStr
   endpoint <- newEndpoint
   withTransport (newTCPTransport4 tcpSocketResolver4) $ \transport ->
     withEndpoint transport endpoint $
-      withBinding transport endpoint name $ do
-        hPutStrLn stdout "Started echo server"
-        finally (echo endpoint name)
-          (hPutStrLn stdout "\nStopped echo server")
+      withBinding transport endpoint server $ do
+        hPutStrLn stdout $ "Started echo server on " ++ (show server)
+        finally (echo endpoint server)
+          (hPutStrLn stdout $ "\nStopped echo server on " ++ (show server))
 
 echo :: Endpoint -> Name -> IO ()
-echo endpoint name = do
-  (bytes,reply) <- hear endpoint name "echo"
+echo endpoint server = do
+  (bytes,reply) <- hear endpoint server "echo"
   case decode bytes of
     Left _ -> error "Could not decode message"
     Right text -> do
       hPutStrLn stdout text
       reply $ encode text
-      echo endpoint name
+      echo endpoint server
