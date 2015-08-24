@@ -1,3 +1,17 @@
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  EchoClient
+-- Copyright   :  (c) Phil Hargett 2015
+-- License     :  MIT (see LICENSE file)
+--
+-- Maintainer  :  phil@haphazardhouse.net
+-- Stability   :  experimental
+-- Portability :  non-portable (requires STM)
+--
+-- Simple echo client for testing out courier.
+--
+-----------------------------------------------------------------------------
+
 module Main where
 
 -- local imports

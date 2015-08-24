@@ -83,13 +83,17 @@ import GHC.Generics hiding (from)
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
+{-|
+An identifier for what method to invoke on the receiving 'Endpoint'. If 'hear' has been invoked on the 'Endpoint'
+with a matching identifier, then calls will be delivered to that invocation of 'hear'.
+-}
 type Method = String
 
 data RPCMessageType = Req | Rsp deriving (Eq,Show,Enum,Generic)
 
 instance Serialize RPCMessageType
 
-{-
+{-|
 A unique identifier for a 'Request'
 -}
 newtype RequestId = RequestId (Word32, Word32, Word32, Word32) deriving (Generic,Eq,Show)
@@ -104,6 +108,10 @@ mkRequestId = do
     ruuid <- nextRandom
     return $ RequestId $ toWords ruuid
 
+{-|
+Encapsulates the initiating side of a 'call': every invocation of 'call' produces a 'Request' that is sent
+to the destination 'Endpoint', where the 'hear'ing side will generate a 'Response' after completing the request'
+-}
 data Request = Request {
     requestId :: RequestId,
     requestCaller :: Name,
@@ -125,7 +133,10 @@ instance Serialize Request where
         method <- get
         args <- get
         return $ Request rid caller method args
-
+{-|
+Encapsulates the completion side of a 'call': every invocation of 'call' produces a 'Request' that is sent
+to the destination 'Endpoint', where the 'hear'ing side will generate a 'Response' after completing the request'
+-}
 data Response = Response {
     responseId :: RequestId,
     responseFrom :: Name,

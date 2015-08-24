@@ -58,15 +58,27 @@ newUDPTransport family resolver = do
       shutdown = udpShutdown vPeers
     }
 
+{-|
+Create a 'Transport' for exchanging 'Message's between endpoints via UDP over IP
+-}
 newUDPTransport4 :: Resolver -> IO Transport
 newUDPTransport4 = newUDPTransport NS.AF_INET
 
+{-|
+Create a 'Transport' for exchanging 'Message's between endpoints via UDP over IPv6
+-}
 newUDPTransport6 :: Resolver -> IO Transport
 newUDPTransport6 = newUDPTransport NS.AF_INET6
 
+{-|
+Create a 'Resolve' for resolving 'Name's for use with UDP over IP.
+-}
 udpSocketResolver4 :: Name -> IO [NS.SockAddr]
 udpSocketResolver4 = socketResolver4 NS.Datagram
 
+{-|
+Create a 'Resolve' for resolving 'Name's for use with UDP over IPv6.
+-}
 udpSocketResolver6 :: Name -> IO [NS.SockAddr]
 udpSocketResolver6 = socketResolver6 NS.Datagram
 

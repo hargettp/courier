@@ -1,3 +1,17 @@
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  HelloWorld
+-- Copyright   :  (c) Phil Hargett 2015
+-- License     :  MIT (see LICENSE file)
+--
+-- Maintainer  :  phil@haphazardhouse.net
+-- Stability   :  experimental
+-- Portability :  non-portable (requires STM)
+--
+-- Basic code sample for explaining how to use courier.
+--
+-----------------------------------------------------------------------------
+
 module Main where
 
  -- Import this package to manage endpoints

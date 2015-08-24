@@ -43,6 +43,7 @@ import qualified Network.Socket.ByteString as NSB
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
+
 type SocketConnections = TVar (M.Map NS.SockAddr Connection)
 
 newTCPTransport :: NS.Family -> Resolver -> IO Transport
@@ -56,15 +57,27 @@ newTCPTransport family resolver = atomically $ do
     shutdown = tcpShutdown vPeers
   }
 
+{-|
+Create a 'Transport' for exchanging 'Message's between endpoints via TCP over IP
+-}
 newTCPTransport4 :: Resolver -> IO Transport
 newTCPTransport4 = newTCPTransport NS.AF_INET
 
+{-|
+Create a 'Transport' for exchanging 'Message's between endpoints via TCP over IPv6
+-}
 newTCPTransport6 :: Resolver -> IO Transport
 newTCPTransport6 = newTCPTransport NS.AF_INET6
 
+{-|
+Create a 'Resolve' for resolving 'Name's for use with TCP over IP.
+-}
 tcpSocketResolver4 :: Name -> IO [NS.SockAddr]
 tcpSocketResolver4 = socketResolver4 NS.Stream
 
+{-|
+Create a 'Resolve' for resolving 'Name's for use with TCP over IPv6.
+-}
 tcpSocketResolver6 :: Name -> IO [NS.SockAddr]
 tcpSocketResolver6 = socketResolver6 NS.Stream
 

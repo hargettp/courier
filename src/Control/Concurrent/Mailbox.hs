@@ -76,6 +76,9 @@ import Control.Concurrent.STM
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
+{-|
+A 'Mailbox' is a variation of a 'Control.Concurrent.TQueue', with the added feature of selective message retrieval.
+-}
 data Mailbox m = Mailbox
     {-# UNPACK #-} !(TVar [m])
     {-# UNPACK #-} !(TVar [m])

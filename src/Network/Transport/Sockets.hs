@@ -60,14 +60,16 @@ import qualified Network.Socket as NS
 --------------------------------------------------------------------------------
 
 type Connect = Endpoint -> Name -> IO SocketConnection
--- type Disconnect = IO ()
 
+{-|
+A 'Resolver' translates a name into a list of 'NS.SockAddr' for use with a socket-based 'Transport'.
+-}
 type Resolver = Name -> IO [NS.SockAddr]
 
--- data Resolver = Resolver {
---   resolve :: Name -> IO [NS.SockAddr]
---   }
 
+{-|
+A 'SocketConnection' encapsulates the state of a single outbound connection.
+-}
 data SocketConnection = SocketConnection {
   connectionDestination :: TMVar Name,
   sendSocketMessage :: Message -> IO (),
@@ -75,11 +77,18 @@ data SocketConnection = SocketConnection {
   disconnectSocket :: IO ()
 }
 
+{-|
+Exceptions thrown by a 'Resolver'.
+-}
 data ResolverException = CannotResolveName Name
   deriving (Show,Typeable)
 
 instance Exception ResolverException
 
+{-|
+Socket-based protocols need a way to unambiguously identify who is communicating on a particular 'SocketConnection';
+this type accomodates both identifying the sender and sending an actual 'Message'.
+-}
 data SocketMessage =
   IdentifySender Name
   | SocketMessage Message
@@ -87,6 +96,9 @@ data SocketMessage =
 
 instance Serialize SocketMessage
 
+{-|
+Helper to resolve a 'Name' to a single 'NS.SockAddr' for use with a socket-based 'Transport'.
+-}
 resolve1 :: Resolver -> Name -> IO NS.SockAddr
 resolve1 resolve name = do
   addresses <- resolve name
@@ -94,6 +106,10 @@ resolve1 resolve name = do
     [] -> throw $ CannotResolveName name
     (address:_) -> return address
 
+{-|
+Simple 'Resolver' for socket-based 'Transport's that just parse's the 'String' inside the 'Name', with the expected
+format "host:port"
+-}
 socketResolver :: NS.Family -> NS.SocketType -> Name -> IO [NS.SockAddr]
 socketResolver family socketType name =
   let (host,port) = split nm
@@ -109,12 +125,21 @@ socketResolver family socketType name =
       _ -> let (w',ws') = split ws
         in (w:w',ws')
 
+{-|
+Variation of 'socketResolve' for standard IP addresses.
+-}
 socketResolver4 :: NS.SocketType -> Name -> IO [NS.SockAddr]
 socketResolver4 = socketResolver NS.AF_INET
 
+{-|
+Variation of 'socketResolve' for standard IPv6 addresses.
+-}
 socketResolver6 ::NS.SocketType ->  Name -> IO [NS.SockAddr]
 socketResolver6 = socketResolver NS.AF_INET6
 
+{-|
+Returns the wildcard 'NS.SockAddr' for the specified 'NS.SockAddr', if possible.
+-}
 wildcard :: NS.SockAddr -> IO NS.SockAddr
 wildcard address =
     case address of
@@ -122,6 +147,9 @@ wildcard address =
         NS.SockAddrInet6 port flow _ scope -> return $ NS.SockAddrInet6 port flow NS.iN6ADDR_ANY scope
         _ -> return address
 
+{-|
+Listens for new connections on a new 'NS.Socket', and return the 'NS.Socket'.
+-}
 socketListen :: NS.Family -> NS.SocketType -> Resolver -> Name -> IO NS.Socket
 socketListen family socketType resolver name = do
   address <- resolve1 resolver name
@@ -134,9 +162,14 @@ socketListen family socketType resolver name = do
   NS.listen socket 2048 -- TODO think about a configurable backlog
   return socket
 
--- type SocketConnections = TVar (M.Map Name (Async ()))
+{-|
+Mutble 'M.Map' of 'Name's to 'Connection's.
+-}
 type Connections = TVar (M.Map Name Connection)
 
+{-|
+Establish a 'connector' for exchanging messages from 'Endpoint' with a destination specified by 'Name'.
+-}
 socketConnect :: Mailboxes -> Connect -> Endpoint -> Name  -> IO Connection
 socketConnect mailboxes sConnect endpoint name = do
   connr <- async $ connector mailboxes endpoint name sConnect
@@ -145,6 +178,10 @@ socketConnect mailboxes sConnect endpoint name = do
   }
   return conn
 
+{-|
+Maintain a 'Connection' between an 'Endpoint' and a destination specified by 'Name'. Should the connection,
+the connection will automatically be re-attempted.
+-}
 connector :: Mailboxes -> Endpoint -> Name -> Connect -> IO ()
 connector mailboxes endpoint name transportConnect = loopUntilKilled $ do
   connection <- transportConnect endpoint name
@@ -165,6 +202,9 @@ connector mailboxes endpoint name transportConnect = loopUntilKilled $ do
     untilKilled :: AsyncException -> IO ()
     untilKilled _ = return ()
 
+{-|
+Exchange 'Messages' with the 'Endpoint' on the other side of a 'SocketConnection'.
+-}
 messenger :: Mailboxes -> Endpoint -> SocketConnection -> IO ()
 messenger mailboxes endpoint connection =
   -- counting on race_ to kill reader & writer
