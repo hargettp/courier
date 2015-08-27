@@ -51,7 +51,7 @@ newTCPTransport family resolver = atomically $ do
   vPeers <- newTVar M.empty
   mailboxes <- newTVar M.empty
   return Transport {
-    bind = tcpBind mailboxes family resolver,
+    bind = tcpBind mailboxes family resolver vPeers,
     dispatch = dispatcher mailboxes,
     connect =  socketConnect mailboxes $ tcpConnect family resolver,
     shutdown = tcpShutdown vPeers
@@ -81,9 +81,8 @@ Create a 'Resolve' for resolving 'Name's for use with TCP over IPv6.
 tcpSocketResolver6 :: Name -> IO [NS.SockAddr]
 tcpSocketResolver6 = socketResolver6 NS.Stream
 
-tcpBind :: Mailboxes -> NS.Family -> Resolver -> Endpoint -> Name -> IO Binding
-tcpBind mailboxes family resolver endpoint name = do
-  vConnections <- atomically $ newTVar M.empty
+tcpBind :: Mailboxes -> NS.Family -> Resolver -> SocketConnections -> Endpoint -> Name -> IO Binding
+tcpBind mailboxes family resolver vConnections endpoint name = do
   listener <- async $ tcpListen mailboxes family resolver vConnections endpoint name
   return Binding {
     bindingName = name,
@@ -102,7 +101,9 @@ accept mailboxes socket vConnections endpoint = do
   connection <- tcpConnection peer
   msngr <- async $ messenger mailboxes endpoint connection
   let conn = Connection {
-    disconnect = cancel msngr
+    disconnect = do
+      atomically $ modifyTVar vConnections $ M.delete peerAddress
+      cancel msngr
   }
   maybeOldConn <- atomically $ do
     connections <- readTVar vConnections
