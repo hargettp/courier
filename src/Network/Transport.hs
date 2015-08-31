@@ -69,6 +69,9 @@ module Network.Transport (
   withConnection3,
   withConnection4,
 
+  withConnections,
+  withCompleteNetwork
+
 ) where
 
 -- local imports
@@ -264,25 +267,36 @@ withConnection transport endpoint name fn = do
 A helper for ensuring that 2 'Connection's are maintained during execution of a function.
 -}
 withConnection2 :: Transport -> Endpoint -> Name -> Name -> IO () -> IO ()
-withConnection2 transport endpoint name1 name2 fn =
-  withConnection transport endpoint name1 $
-    withConnection transport endpoint name2 fn
+withConnection2 transport endpoint name1 name2 = withConnections transport endpoint [name1,name2]
 
 {-|
 A helper for ensuring that 3 'Connection's are maintained during execution of a function.
 -}
 withConnection3 :: Transport -> Endpoint -> Name -> Name -> Name -> IO () -> IO ()
-withConnection3 transport endpoint name1 name2 name3 fn =
-  withConnection transport endpoint name1 $
-    withConnection transport endpoint name2 $
-      withConnection transport endpoint name3 fn
+withConnection3 transport endpoint name1 name2 name3 = withConnections transport endpoint [name1,name2,name3]
 
 {-|
 A helper for ensuring that 4 'Connection's are maintained during execution of a function.
 -}
 withConnection4 :: Transport -> Endpoint -> Name -> Name -> Name -> Name -> IO () -> IO ()
-withConnection4 transport endpoint name1 name2 name3 name4 fn =
-  withConnection transport endpoint name1 $
-    withConnection transport endpoint name2 $
-      withConnection transport endpoint name3 $
-        withConnection transport endpoint name4 fn
+withConnection4 transport endpoint name1 name2 name3 name4 = withConnections transport endpoint [name1,name2,name3,name4]
+
+--
+--  Various helpers
+--
+withConnections :: Transport -> Endpoint -> [Name] -> IO () -> IO ()
+withConnections _ _ [] fn = fn
+withConnections transport endpoint (destination:destinations) fn =
+  withConnection transport endpoint destination $
+    withConnections transport endpoint destinations fn
+
+{-|
+This is a helper designed to create a complete network, where there are
+enough connections to ensure every endpoint has a connection to every other endpoint.
+-}
+withCompleteNetwork :: Transport -> [Name] -> Endpoint -> Name -> IO () -> IO ()
+withCompleteNetwork _ [] _ _ fn = fn
+withCompleteNetwork transport(destination:destinations) endpoint origin fn =
+  if destination == origin
+    then withConnections transport endpoint destinations fn
+    else withCompleteNetwork transport destinations endpoint origin fn
