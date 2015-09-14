@@ -47,10 +47,13 @@ module Network.RPC (
     methodSelector,
     hear,
     hearTimeout,
+    hearAll,
+    hearAllTimeout,
     Reply,
 
     HandleSite,
     handle,
+    handleAll,
     hangup,
 
     Request(..),
@@ -326,6 +329,12 @@ methodSelector method msg = do
                 then Just (caller,rid,args)
                 else Nothing
 
+anySelector :: Message -> Maybe (Name,RequestId,Method,Message)
+anySelector msg =
+  case decode msg of
+    Left _ -> Nothing
+    Right (Request rid caller method args) -> Just (caller,rid,method,args)
+
 {-|
 Wait for a single incoming request to invoke the indicated 'Method' on the specified
 'Endpoint'. Return both the method arguments and a 'Reply' function useful for sending
@@ -345,7 +354,6 @@ hear endpoint name method = do
         reply caller rid result = do
             sendMessage endpoint caller $ encode $ Response rid name result
 
-
 {-|
 Same as 'hear', except return 'Nothing' if no request received within the specified
 timeout (measured in microseconds), or return a 'Just' instance containing both the
@@ -356,6 +364,34 @@ hearTimeout endpoint name method timeout = do
     req <- selectMessageTimeout endpoint timeout $ methodSelector method
     case req of
         Just (caller,rid,args) -> return $ Just (args, reply caller rid)
+        Nothing -> return Nothing
+    where
+        reply caller rid result = do
+            sendMessage endpoint caller $ encode $ Response rid name result
+
+{-|
+A variant of 'hear', except it listens for any incoming RPC request on the specified 'Endpoint'.
+-}
+hearAll :: Endpoint -> Name -> IO (Method,Message,Reply Message)
+hearAll endpoint name = do
+    (caller,rid,method,args) <- selectMessage endpoint anySelector
+    return (method,args,reply caller rid)
+    where
+        reply caller rid result =
+          sendMessage endpoint caller $ encode $ Response rid name result
+        anySelector msg =
+          case decode msg of
+            Left _ -> Nothing
+            Right (Request rid caller method args) -> Just (caller,rid,method,args)
+
+{-|
+A variant of 'hearTimeout', except it listens for any incoming RPC request on the specified 'Endpoint'
+-}
+hearAllTimeout :: Endpoint -> Name -> Int -> IO (Maybe (Method,Message,Reply Message))
+hearAllTimeout endpoint name timeout = do
+    req <- selectMessageTimeout endpoint timeout anySelector
+    case req of
+        Just (caller,rid,method,args) -> return $ Just (method,args, reply caller rid)
         Nothing -> return Nothing
     where
         reply caller rid result = do
@@ -373,12 +409,26 @@ until 'hangup' is called on the returned 'HandleSite'.
 -}
 handle :: Endpoint -> Name -> Method -> (Message -> IO Message) -> IO HandleSite
 handle endpoint name method fn = do
-    task <- async $ handleCall
+    task <- async handleCall
     return $ HandleSite name task
     where
         handleCall = do
             (args,reply) <- hear endpoint name method
             result <- fn args
+            reply result
+            handleCall
+
+{-|
+Handle all RPCs on the specified 'Endpoint' until 'hangup' is called on the returned 'HandleSite'
+-}
+handleAll :: Endpoint -> Name -> (Method -> Message -> IO Message) -> IO HandleSite
+handleAll endpoint name fn = do
+    task <- async handleCall
+    return $ HandleSite name task
+    where
+        handleCall = do
+            (method,args,reply) <- hearAll endpoint name
+            result <- fn method args
             reply result
             handleCall
 
