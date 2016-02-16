@@ -1,3 +1,8 @@
+0.1.1.2
+
+  * Updated README with better working example
+  * Removed warning about TCP/IP transport; it's working again
+  
 0.1.1.1
 
 There are significant changes in this release, due to a complete rewrite of TCP connection handling, and,

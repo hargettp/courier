@@ -1,5 +1,5 @@
 name:                courier
-version:             0.1.1.1
+version:             0.1.1.2
 synopsis:           A message-passing library for simplifying network applications
 description:         Inspired by Erlang's simple message-passing facilities, courier provides roughly similar
                      capabilities. Applications simply create one or more endpoints,
