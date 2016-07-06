@@ -204,10 +204,10 @@ Remove 'Name' as one of the 'boundEndpointNames' for an 'Endpoint'. Throws 'Bind
 if the 'Endpoint' is not bound to the 'Name'.
 -}
 unbindName :: Endpoint -> Name -> STM ()
-unbindName endpoint name = modifyTVar (boundEndpointNames endpoint) $ \bindings -> do
-  case S.member name bindings of
-    False -> throw $ BindingDoesNotExist name
-    True -> S.delete name bindings
+unbindName endpoint name = modifyTVar (boundEndpointNames endpoint) $ \bindings ->
+  if S.member name bindings
+    then S.delete name bindings
+    else throw $ BindingDoesNotExist name
 
 {-|
 Exceptions generated when `Network.Transport.bind`ing a 'Name'.

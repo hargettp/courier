@@ -64,10 +64,7 @@ library
 
   ghc-options:
     -Wall
-    -fno-state-hack
     -threaded
-    -- -O2
-    -- -fprof-auto
 
   -- other-modules:
 
@@ -87,7 +84,6 @@ executable echo-server
   main-is: EchoServer.hs
   ghc-options:
     -Wall
-    -fno-state-hack
     -threaded
   build-depends:       base >=4.6 && <5,
                        cereal,

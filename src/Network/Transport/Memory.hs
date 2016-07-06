@@ -84,7 +84,7 @@ memoryBind vBindings endpoint name = atomically $ do
     Just _ -> throw $ BindingExists name
 
 memoryUnbind :: Bindings -> Endpoint -> Name -> IO ()
-memoryUnbind vBindings _ name = atomically $ do
+memoryUnbind vBindings _ name = atomically $ 
   modifyTVar vBindings $ M.delete name
 
 type Bindings = TVar (M.Map Name Endpoint)
