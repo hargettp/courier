@@ -1,8 +1,12 @@
+0.1.1.3
+
+  * Changed with... functions to return arbitrary types in IO, instead of always returning ()
+
 0.1.1.2
 
   * Updated README with better working example
   * Removed warning about TCP/IP transport; it's working again
-  
+
 0.1.1.1
 
 There are significant changes in this release, due to a complete rewrite of TCP connection handling, and,

@@ -175,7 +175,7 @@ dispatchMessage mailboxes name message = do
 {-|
 Within the body of the function, ensures that 'Message's are dispatched as necessary.
 -}
-withTransport :: IO Transport -> (Transport -> IO ()) -> IO ()
+withTransport :: IO Transport -> (Transport -> IO a) -> IO a
 withTransport factory fn = do
   transport <- factory
   finally (fn transport)
@@ -185,7 +185,7 @@ withTransport factory fn = do
 Within the body of the function, ensure that there is a 'Dispatcher' for the 'Endpoint'.
 
 -}
-withEndpoint :: Transport -> Endpoint -> IO ()  -> IO ()
+withEndpoint :: Transport -> Endpoint -> IO a  -> IO a
 withEndpoint transport endpoint fn = do
   d <- dispatch transport endpoint
   finally fn
@@ -205,7 +205,7 @@ A helper for ensuring there is a 'Binding' of a specific 'Endpoint' to a specifi
 on the provided 'Transport' during a function.
 
 -}
-withBinding :: Transport -> Endpoint -> Name -> IO () -> IO ()
+withBinding :: Transport -> Endpoint -> Name -> IO a -> IO a
 withBinding transport endpoint name actor = do
   atomically $ do
     bindings <- readTVar $ boundEndpointNames endpoint
@@ -221,7 +221,7 @@ withBinding transport endpoint name actor = do
 A helper for ensuring there are 'Binding's of a specific 'Endpoint' to specific 'Name's
 on the provided 'Transport' during a function.
 -}
-withBinding2 :: Transport -> (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
+withBinding2 :: Transport -> (Endpoint,Name) -> (Endpoint,Name) -> IO a -> IO a
 withBinding2 transport (endpoint1,name1) (endpoint2,name2) fn =
   withBinding transport endpoint1 name1 $
     withBinding transport endpoint2 name2 fn
@@ -230,7 +230,7 @@ withBinding2 transport (endpoint1,name1) (endpoint2,name2) fn =
 A helper for ensuring there are 'Binding's of a specific 'Endpoint' to specific 'Name's
 on the provided 'Transport' during a function.
 -}
-withBinding3 :: Transport -> (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
+withBinding3 :: Transport -> (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> IO a -> IO a
 withBinding3 transport (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) fn =
   withBinding transport endpoint1 name1 $
     withBinding transport endpoint2 name2 $
@@ -240,7 +240,7 @@ withBinding3 transport (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) fn 
 A helper for ensuring there are 'Binding's of a specific 'Endpoint' to specific 'Name's
 on the provided 'Transport' during a function.
 -}
-withBinding4 :: Transport -> (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> IO () -> IO ()
+withBinding4 :: Transport -> (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> (Endpoint,Name) -> IO a -> IO a
 withBinding4 transport (endpoint1,name1) (endpoint2,name2) (endpoint3,name3) (endpoint4,name4) fn =
   withBinding transport endpoint1 name1 $
     withBinding transport endpoint2 name2 $
@@ -258,7 +258,7 @@ data Connection = Connection {
 {-|
 A helper for ensuring that a 'Connection' is maintained during execution of a function.
 -}
-withConnection :: Transport -> Endpoint -> Name -> IO () -> IO ()
+withConnection :: Transport -> Endpoint -> Name -> IO a -> IO a
 withConnection transport endpoint name fn = do
   connection <- connect transport endpoint name
   finally fn $ disconnect connection
@@ -266,25 +266,25 @@ withConnection transport endpoint name fn = do
 {-|
 A helper for ensuring that 2 'Connection's are maintained during execution of a function.
 -}
-withConnection2 :: Transport -> Endpoint -> Name -> Name -> IO () -> IO ()
+withConnection2 :: Transport -> Endpoint -> Name -> Name -> IO a -> IO a
 withConnection2 transport endpoint name1 name2 = withConnections transport endpoint [name1,name2]
 
 {-|
 A helper for ensuring that 3 'Connection's are maintained during execution of a function.
 -}
-withConnection3 :: Transport -> Endpoint -> Name -> Name -> Name -> IO () -> IO ()
+withConnection3 :: Transport -> Endpoint -> Name -> Name -> Name -> IO a -> IO a
 withConnection3 transport endpoint name1 name2 name3 = withConnections transport endpoint [name1,name2,name3]
 
 {-|
 A helper for ensuring that 4 'Connection's are maintained during execution of a function.
 -}
-withConnection4 :: Transport -> Endpoint -> Name -> Name -> Name -> Name -> IO () -> IO ()
+withConnection4 :: Transport -> Endpoint -> Name -> Name -> Name -> Name -> IO a -> IO a
 withConnection4 transport endpoint name1 name2 name3 name4 = withConnections transport endpoint [name1,name2,name3,name4]
 
 --
 --  Various helpers
 --
-withConnections :: Transport -> Endpoint -> [Name] -> IO () -> IO ()
+withConnections :: Transport -> Endpoint -> [Name] -> IO a -> IO a
 withConnections _ _ [] fn = fn
 withConnections transport endpoint (destination:destinations) fn =
   withConnection transport endpoint destination $
@@ -294,7 +294,7 @@ withConnections transport endpoint (destination:destinations) fn =
 This is a helper designed to create a complete network, where there are
 enough connections to ensure every endpoint has a connection to every other endpoint.
 -}
-withCompleteNetwork :: Transport -> [Name] -> Endpoint -> Name -> IO () -> IO ()
+withCompleteNetwork :: Transport -> [Name] -> Endpoint -> Name -> IO a -> IO a
 withCompleteNetwork _ [] _ _ fn = fn
 withCompleteNetwork transport(destination:destinations) endpoint origin fn =
   if destination == origin

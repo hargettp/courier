@@ -183,7 +183,7 @@ often be useful for establishing the 'Name' of a client or initiator of a 'Netwo
 without requiring the client also have a 'Network.Transport.Binding'.
 
 -}
-withName :: Endpoint -> Name -> IO () -> IO ()
+withName :: Endpoint -> Name -> IO a -> IO a
 withName endpoint origin actor = do
   atomically $ bindName endpoint origin
   finally actor $ atomically $ unbindName endpoint origin
