@@ -55,23 +55,29 @@ newMemoryTransport = do
       shutdown = return ()
       }
 
-memoryDispatcher :: Bindings -> Endpoint -> IO Dispatcher
+memoryDispatcher :: TBindings -> Endpoint -> IO Dispatcher
 memoryDispatcher vBindings endpoint = do
   d <- async disp
   return Dispatcher {
-    stop = cancel d
+    stop = do
+      cancel d
+      memoryFlushMessages vBindings endpoint
   }
   where
     disp = do
       atomically $ do
         bindings <- readTVar vBindings
         env <- readMailbox $ endpointOutbound endpoint
-        case M.lookup (messageDestination env) bindings  of
-          Nothing -> return ()
-          Just destination -> postMessage destination (envelopeMessage env)
+        memoryDispatchEnvelope bindings env
       disp
 
-memoryBind :: Bindings -> Endpoint -> Name -> IO Binding
+memoryDispatchEnvelope :: Bindings -> Envelope -> STM ()
+memoryDispatchEnvelope bindings env =
+  case M.lookup (messageDestination env) bindings  of
+    Nothing -> return ()
+    Just destination -> postMessage destination (envelopeMessage env)
+
+memoryBind :: TBindings -> Endpoint -> Name -> IO Binding
 memoryBind vBindings endpoint name = atomically $ do
   bindings <- readTVar vBindings
   case M.lookup name bindings of
@@ -83,14 +89,28 @@ memoryBind vBindings endpoint name = atomically $ do
       }
     Just _ -> throw $ BindingExists name
 
-memoryUnbind :: Bindings -> Endpoint -> Name -> IO ()
-memoryUnbind vBindings _ name = atomically $ 
+memoryUnbind :: TBindings -> Endpoint -> Name -> IO ()
+memoryUnbind vBindings _ name = atomically $
   modifyTVar vBindings $ M.delete name
 
-type Bindings = TVar (M.Map Name Endpoint)
+type TBindings = TVar Bindings
+type Bindings = M.Map Name Endpoint
 
 memoryConnect :: Endpoint -> Name -> IO Connection
 memoryConnect _ _ =
   return Connection {
     disconnect = return ()
   }
+
+memoryFlushMessages :: TBindings -> Endpoint -> IO ()
+memoryFlushMessages vBindings endpoint =
+  atomically $ flush
+  where
+    flush = do
+      bindings <- readTVar vBindings
+      maybeEnv <- tryReadMailbox $ endpointOutbound endpoint
+      case maybeEnv of
+        Just env -> do
+          memoryDispatchEnvelope bindings env
+          flush
+        Nothing -> return ()
