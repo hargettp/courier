@@ -135,15 +135,15 @@ testTransportOneHearCall transportFactory name1 name2 = timeLimited $ do
   withTransport transportFactory $ \transport ->
     withNewEndpoint2 transport $ \endpoint1 endpoint2 ->
       withBinding2 transport (endpoint1,name1) (endpoint2,name2) $ do
-        withConnection transport endpoint1 name2 $ do
-          _ <- async $ do
+        withConnection transport endpoint1 name2 $
+          withAsync (do
               (bytes,reply) <- hear endpoint2 name2 "foo"
               let Right msg = decode bytes
-              reply $ encode $ msg ++ "!"
-          let cs = newCallSite endpoint1 name1
-          bytes <- call cs name2 "foo" $ encode "hello"
-          let Right result = decode bytes
-          assertEqual "Result not expected value" "hello!" result
+              reply $ encode $ msg ++ "!") $ \_ -> do
+            let cs = newCallSite endpoint1 name1
+            bytes <- call cs name2 "foo" $ encode "hello"
+            let Right result = decode bytes
+            assertEqual "Result not expected value" "hello!" result
 
 testTransportOneCallHear :: IO Transport -> Name -> Name -> Assertion
 testTransportOneCallHear transportFactory name1 name2 = timeLimited $ do
@@ -155,13 +155,13 @@ testTransportOneCallHear transportFactory name1 name2 = timeLimited $ do
             withConnection transport endpoint1 name2 $ do
               let cs = newCallSite endpoint1 name1
               acall <- async $ call cs name2 "foo" $ encode "hello"
-              _ <- async $ do
+              withAsync (do
                   (bytes,reply) <- hear endpoint2 name2 "foo"
                   let Right msg = decode bytes
-                  reply $ encode $ msg ++ "!"
-              bytes <- wait acall
-              let Right result = decode bytes
-              assertEqual "Result not expected value" "hello!" result
+                  reply $ encode $ msg ++ "!") $ \_ -> do
+                bytes <- wait acall
+                let Right result = decode bytes
+                assertEqual "Result not expected value" "hello!" result
 
 testTransportConcurrentCallHear :: IO Transport -> Name -> Name -> Assertion
 testTransportConcurrentCallHear transportFactory name1 name2 = timeLimited $ do
