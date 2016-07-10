@@ -67,7 +67,7 @@ transportTestSuite transport transportLabel name1 name2 name3 name4 = [
   ]
 
 timeLimited :: Assertion -> Assertion
-timeLimited assn = timeBound (1 * 1000000 :: Int) assn
+timeLimited assn = timeBound (2 * 1000000 :: Int) assn
 
 testTransportEndpointSendReceive :: IO Transport -> Name -> Name -> Assertion
 testTransportEndpointSendReceive transportFactory name1 name2 = timeLimited $ do
