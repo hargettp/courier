@@ -1,8 +1,9 @@
 0.1.1.3
 
-  * Changed with... functions to return arbitrary types in IO, instead of always returning ()
+  * Changed with... functions to return specified types in IO, instead of always returning (); not technically a
+    breaking change, but does prevent backward compatibility from here
   * Memory transport flushes to destinations before completing shutdown
-  * Linting and first compile against GHC 8.0.1
+  * Linting and first compile against GHC 8.0.1; continuing to support back to 7.6 for now
 
 0.1.1.2
 
