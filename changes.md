@@ -1,6 +1,8 @@
 0.1.1.3
 
   * Changed with... functions to return arbitrary types in IO, instead of always returning ()
+  * Memory transport flushes to destinations before completing shutdown
+  * Linting and first compile against GHC 8.0.1
 
 0.1.1.2
 
