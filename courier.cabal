@@ -64,7 +64,6 @@ library
 
   ghc-options:
     -Wall
-    -threaded
 
   -- other-modules:
 
