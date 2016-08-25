@@ -107,7 +107,7 @@ memoryConnect _ _ =
 
 memoryFlushMessages :: TBindings -> Endpoint -> IO ()
 memoryFlushMessages vBindings endpoint =
-  atomically $ flush
+  atomically flush
   where
     flush = do
       bindings <- readTVar vBindings
