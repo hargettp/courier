@@ -1,3 +1,7 @@
+0.1.1.4
+
+  * Corrected an issue with memory transport where a message to an unbound destination would be dropped
+
 0.1.1.3
 
   * Changed with... functions to return specified types in IO, instead of always returning (); not technically a
