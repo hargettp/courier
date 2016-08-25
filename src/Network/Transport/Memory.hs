@@ -67,7 +67,10 @@ memoryDispatcher vBindings endpoint = do
     disp = do
       atomically $ do
         bindings <- readTVar vBindings
-        env <- readMailbox $ endpointOutbound endpoint
+        env <- selectMailbox (endpointOutbound endpoint) $ \envelope ->
+          case M.lookup (messageDestination envelope) bindings of
+            Just _ -> Just envelope
+            _ -> Nothing
         memoryDispatchEnvelope bindings env
       disp
 
