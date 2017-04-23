@@ -1,3 +1,7 @@
+0.1.1.5
+
+  * Added withClient / withServer helpers
+
 0.1.1.4
 
   * Corrected an issue with memory transport where a message to an unbound destination would be dropped

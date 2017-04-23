@@ -54,8 +54,9 @@ module Network.Transport (
   dispatchMessage,
 
   withTransport,
-
   withEndpoint,
+  withClient,
+  withServer,
 
   Binding(..),
   withBinding,
@@ -300,3 +301,27 @@ withCompleteNetwork transport(destination:destinations) endpoint origin fn =
   if destination == origin
     then withConnections transport endpoint destinations fn
     else withCompleteNetwork transport destinations endpoint origin fn
+
+{-|
+Helper for easily creating clients capable of sending messages on the `Transport`
+and receiving messages at the provided `Name`
+-}
+withClient :: IO Transport -> Name -> (Endpoint -> IO a) -> IO a
+withClient transportFactory name clientFn =
+  withTransport transportFactory $ \transport -> do
+    endpoint <- newEndpoint
+    withEndpoint transport endpoint $
+      withName endpoint name $
+        clientFn endpoint
+
+{-|
+Helper for easily creating servers listening messages sent to the specified `Name`
+over the provided `Transport`
+-}
+withServer :: IO Transport -> Name -> (Transport -> Endpoint -> IO a) -> IO a
+withServer transportFactory name serverFn =
+  withTransport transportFactory $ \transport -> do
+    endpoint <- newEndpoint
+    withEndpoint transport endpoint $
+      withBinding transport endpoint name $
+        serverFn transport endpoint
