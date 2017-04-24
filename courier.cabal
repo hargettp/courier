@@ -68,7 +68,7 @@ library
 
   -- other-modules:
 
-  build-depends:       base >=4.6 && <5,
+  build-depends:       base >=4.8 && <5,
                        async,
                        bytestring,
                        cereal,
