@@ -88,18 +88,6 @@ matrix:
     compiler: ": #stack default osx"
     os: osx
 
-  - env: BUILD=stack ARGS="--resolver lts-2"
-    compiler: ": #stack 7.8.4 osx"
-    os: osx
-
-  - env: BUILD=stack ARGS="--resolver lts-3"
-    compiler: ": #stack 7.10.2 osx"
-    os: osx
-
-  - env: BUILD=stack ARGS="--resolver lts-5"
-    compiler: ": #stack 7.10.3 osx"
-    os: osx
-
   - env: BUILD=stack ARGS="--resolver lts-7"
     compiler: ": #stack 8.0.2 osx"
     os: osx
@@ -111,6 +99,17 @@ matrix:
   allow_failures:
   - env: BUILD=cabal GHCVER=head  CABALVER=head HAPPYVER=1.19.5 ALEXVER=3.1.7
   - env: BUILD=stack ARGS="--resolver nightly"
+  - env: BUILD=stack ARGS="--resolver lts-2"
+    compiler: ": #stack 7.8.4 osx"
+    os: osx
+
+  - env: BUILD=stack ARGS="--resolver lts-3"
+    compiler: ": #stack 7.10.2 osx"
+    os: osx
+
+  - env: BUILD=stack ARGS="--resolver lts-5"
+    compiler: ": #stack 7.10.3 osx"
+    os: osx
 
 before_install:
 # Using compiler above sets CC to an invalid value, so unset it
