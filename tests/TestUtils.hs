@@ -13,6 +13,7 @@ module TestUtils
 
     timeBound,
     troubleshoot,
+    shareTransport
 
     )
   where
@@ -25,6 +26,7 @@ import Network.Transport.Sockets.TCP
 -- external imports
 import Control.Concurrent
 import Control.Concurrent.Async
+import Control.Concurrent.STM
 import Control.Exception
 
 import qualified Network.Socket as NS
@@ -118,3 +120,9 @@ troubleshoot fn = do
     finally (do
         updateGlobalLogger rootLoggerName (setLevel INFO)
         fn) (updateGlobalLogger rootLoggerName (setLevel WARNING))
+
+shareTransport :: IO Transport -> IO (IO Transport)
+shareTransport transportFactory  = do
+  transport <- transportFactory
+  vTransport <- atomically $ newTVar transport
+  return $ atomically $ readTVar vTransport

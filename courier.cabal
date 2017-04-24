@@ -1,5 +1,5 @@
 name:                courier
-version:             0.1.1.4
+version:             0.1.1.5
 synopsis:            A message-passing library for simplifying network applications
 tested-with:         GHC == 7.6.3, GHC == 7.8.4, GHC == 7.10.2, GHC == 7.10.3, GHC == 8.0.1
 description:         Inspired by Erlang's simple message-passing facilities, courier provides roughly similar

@@ -27,7 +27,6 @@ import TestUtils
 
 -- external imports
 
-import Control.Applicative
 import Control.Concurrent.Async
 
 import qualified Data.Map as M
@@ -50,6 +49,8 @@ transportTestSuite transport transportLabel name1 name2 name3 name4 = [
     testTransportEndpointSendReceive2SerialServers transport name1 name2,
   testCase  (transportLabel ++ "-sendReceive-2-serial-clients") $
     testTransportEndpointSendReceive2SerialClients transport name1 name2,
+  testCase  (transportLabel ++ "-withClient-withServer") $
+    testWithClientWithServer transport name1 name2,
   testCase  (transportLabel ++ "-rpc-one-hear-call") $
     testTransportOneHearCall transport name1 name2,
   testCase  (transportLabel ++ "-rpc-one-call-hear") $
@@ -129,6 +130,19 @@ testTransportEndpointSendReceive2SerialClients transportFactory name1 name2 = ti
             msg <- receiveMessage endpoint2
             assertEqual "Received message not same as sent" (Right "hello!") (decode msg)
             return ()
+
+testWithClientWithServer :: IO Transport -> Name -> Name -> Assertion
+testWithClientWithServer transportFactory name1 name2 = timeLimited $ do
+  sharedTransportFactory <- shareTransport transportFactory
+  server2 <- async $ withServer sharedTransportFactory name2 $ \_ endpoint2 ->
+    receiveMessage endpoint2
+  withClient sharedTransportFactory name1 $ \endpoint1 -> do
+    transport <- sharedTransportFactory
+    withConnection transport endpoint1 name2 $ do
+      sendMessage endpoint1 name2 $ encode "hello!"
+      msg <- wait server2
+      assertEqual "Received message not same as sent" (Right "hello!") (decode msg)
+      return ()
 
 testTransportOneHearCall :: IO Transport -> Name -> Name -> Assertion
 testTransportOneHearCall transportFactory name1 name2 = timeLimited $ do
