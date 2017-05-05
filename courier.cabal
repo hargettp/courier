@@ -30,6 +30,7 @@ extra-source-files:  changes.md
                      tests/TestMailbox.hs
                      tests/TestMemory.hs
                      tests/TestRPC.hs
+                     tests/TestRPCTyped.hs
                      tests/TestTCP.hs
                      tests/TestUDP.hs
                      tests/TransportTestSuite.hs
@@ -62,6 +63,7 @@ library
                   Network.Transport.Sockets.UDP
                   Control.Concurrent.Mailbox
                   Network.RPC
+                  Network.RPC.Typed
 
   ghc-options:
     -Wall

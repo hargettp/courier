@@ -3,6 +3,7 @@
   * Added withClient / withServer helpers
   * Removed support for 7.6 / 7.8, as they are before the FAMP proposal was         
     implemented (https://wiki.haskell.org/Functor-Applicative-Monad_Proposal)
+  * Added typed equivalents for a selection of functions in Network.RPC
 
 0.1.1.4
 
