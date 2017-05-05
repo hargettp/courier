@@ -51,7 +51,7 @@ module Network.RPC (
     hearAllTimeout,
     Reply,
 
-    HandleSite,
+    HandleSite(..),
     handle,
     handleAll,
     hangup,
@@ -101,7 +101,7 @@ A unique identifier for a 'Request'
 -}
 newtype RequestId = RequestId (Word32, Word32, Word32, Word32) deriving (Generic,Eq,Show)
 
-instance Serialize (RequestId)
+instance Serialize RequestId
 
 {-|
 Create a new identifier for 'Request's
@@ -285,7 +285,7 @@ gcallWithTimeout (CallSite endpoint from) names method delay args = do
                 else recvAll req allResults
         -- Make sure the final results have an entry for every name,
         -- but put Nothing for those handlers that did not return a result in time
-        complete :: (Serialize b) => M.Map Name b -> M.Map Name (Maybe b)
+        complete :: M.Map Name b -> M.Map Name (Maybe b)
         complete partial = foldl (\final name -> M.insert name (M.lookup name partial) final) M.empty names
 
 {-|
@@ -374,12 +374,12 @@ A variant of 'hear', except it listens for any incoming RPC request on the speci
 -}
 hearAll :: Endpoint -> Name -> IO (Method,Message,Reply Message)
 hearAll endpoint name = do
-    (caller,rid,method,args) <- selectMessage endpoint anySelector
+    (caller,rid,method,args) <- selectMessage endpoint selectorForAll
     return (method,args,reply caller rid)
     where
         reply caller rid result =
           sendMessage endpoint caller $ encode $ Response rid name result
-        anySelector msg =
+        selectorForAll msg =
           case decode msg of
             Left _ -> Nothing
             Right (Request rid caller method args) -> Just (caller,rid,method,args)
