@@ -89,7 +89,7 @@ udpBind family resolver endpoint name = do
   NS.setSocketOption socket NS.ReuseAddr 1
   when (NS.isSupportedSocketOption NS.ReusePort)
     $ NS.setSocketOption socket NS.ReusePort 1
-  NS.bindSocket socket address
+  NS.bind socket address
   listener <- async $
     finally (receiver socket)
       (udpUnbind socket)

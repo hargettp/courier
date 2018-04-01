@@ -76,7 +76,7 @@ library
                        cereal,
                        containers,
                        hslogger,
-                       network,
+                       network >= 2.4,
                        stm,
                        text,
                        uuid
