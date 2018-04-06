@@ -79,7 +79,7 @@ library
                        network,
                        stm,
                        text,
-                       uuid
+                       random
 
 executable echo-server
   hs-source-dirs: echo

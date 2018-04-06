@@ -77,11 +77,11 @@ import Control.Monad
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Serialize
-import Data.UUID
-import Data.UUID.V4
 import Data.Word
 
 import GHC.Generics hiding (from)
+
+import System.Random
 
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -108,8 +108,11 @@ Create a new identifier for 'Request's
 -}
 mkRequestId :: IO RequestId
 mkRequestId = do
-    ruuid <- nextRandom
-    return $ RequestId $ toWords ruuid
+    w1 <- randomIO
+    w2 <- randomIO
+    w3 <- randomIO
+    w4 <- randomIO
+    return $ RequestId (w1, w2, w3, w4)
 
 {-|
 Encapsulates the initiating side of a 'call': every invocation of 'call' produces a 'Request' that is sent
