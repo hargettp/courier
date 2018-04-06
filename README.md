@@ -3,7 +3,7 @@ courier
 
 [![Build Status](https://travis-ci.org/hargettp/courier.svg?branch=master)](https://travis-ci.org/hargettp/courier)
 
-NOTE: As of 4/5/2018, `courier` no longer passes unit tests reliably when building with `cabal`. Please use [https://docs.haskellstack.org/en/stable/README/](stack), as tests continue to pass. 
+NOTE: As of 4/5/2018, `courier` no longer passes unit tests reliably when building with `cabal`. Please use [stack](https://docs.haskellstack.org/en/stable/README/), as tests continue to pass. 
 
 ----
 
