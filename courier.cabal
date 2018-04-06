@@ -79,7 +79,7 @@ library
                        network,
                        stm,
                        text,
-                       uuid
+                       random
 
 executable echo-server
   hs-source-dirs: echo
@@ -125,6 +125,15 @@ Test-Suite test-courier
         stm,
         -- this project's modules
         courier
+    other-modules:
+        TestMailbox
+        TestMemory
+        TestRPC
+        TestRPCTyped
+        TestTCP
+        TestUDP
+        TestUtils
+        TransportTestSuite    
 
     ghc-options:
       -Wall
