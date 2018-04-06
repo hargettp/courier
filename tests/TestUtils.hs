@@ -91,7 +91,7 @@ availablePort f t = do
     (NS.socket (NS.addrFamily a) (NS.addrSocketType a) (NS.addrProtocol a))
     NS.close
     (\s -> do
-       NS.bindSocket s (NS.addrAddress a)
+       NS.bind s (NS.addrAddress a)
        addr <- NS.getSocketName s
        if isPrivileged addr
          then availablePort f t
