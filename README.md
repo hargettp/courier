@@ -3,6 +3,10 @@ courier
 
 [![Build Status](https://travis-ci.org/hargettp/courier.svg?branch=master)](https://travis-ci.org/hargettp/courier)
 
+NOTE: As of 4/5/2018, `courier` no longer passes unit tests reliably when building with `cabal`. Please use [https://docs.haskellstack.org/en/stable/README/](stack), as tests continue to pass. 
+
+----
+
 A basic message-passing library, intended for simplifying network applications.
 
 Inspired by Erlang's simple message-passing facilities, courier provides roughly similar capabilities.  Applications simply
